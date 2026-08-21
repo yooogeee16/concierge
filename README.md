@@ -105,25 +105,6 @@ concierge/
     └── dictionary/                          # 辞書ウィンドウ
 ```
 
-## インストーラーのビルド
-
-[electron-builder](https://www.electron.build/) を使ってWindows用インストーラー(NSIS、.exe)を生成できます。
-
-```bash
-npm run dist:win
-```
-
-生成物は `dist/` に出力されます(Gitには含まれません)。
-
-### リリースの自動公開
-
-`v` から始まるタグ(例: `v0.2.0`)をpushすると、GitHub Actions(`.github/workflows/release.yml`)がWindows用インストーラーをビルドし、自動的に [Releases](https://github.com/yooogeee16/concierge/releases) に公開します。
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
 ## 既知の制限
 
 - 画面上の文字認識はOCR方式のため、画像化された文字・崩れたフォント・背景とのコントラストが低い文字などは認識精度が落ちる場合があります。
