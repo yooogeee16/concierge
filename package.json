@@ -1,0 +1,44 @@
+{
+  "name": "concierge",
+  "version": "0.1.0",
+  "description": "画面上の気になった文字にカーソルを合わせて調べる、透明デスクトップ常駐コンシェルジュアプリ",
+  "main": "main.js",
+  "author": "ytatthan0616-debug",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^31.0.2",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "tesseract.js": "^5.1.1"
+  },
+  "build": {
+    "appId": "com.ytatthan0616.concierge",
+    "productName": "Concierge",
+    "files": [
+      "main.js",
+      "preload*.js",
+      "renderer/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
+  }
+}

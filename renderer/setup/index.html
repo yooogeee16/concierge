@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>コンシェルジュ 初期設定</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="card">
+      <h1>コンシェルジュの初期設定</h1>
+      <p>
+        画面上の文字を解説するには、Gemini APIの無料キーが必要です。<br />
+        <a id="link" href="#">Google AI Studioでキーを取得</a>
+      </p>
+      <label for="apiKey">Gemini APIキー</label>
+      <input id="apiKey" type="password" placeholder="AIza... または AQ... のようなキーを貼り付け" autocomplete="off" />
+
+      <div id="row">
+        <button id="skip" class="secondary">後で設定する</button>
+        <button id="save" class="primary">保存して始める</button>
+      </div>
+      <p id="note">
+        キーはこの端末内(<code>%APPDATA%</code>)にのみ保存され、リポジトリやクラウドには送信されません。後からマスコットを右クリックしていつでも変更できます。
+      </p>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>concierge-popup</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="card">
+      <button id="close" title="閉じる">×</button>
+      <div id="term"></div>
+      <div id="body">
+        <div id="spinner" class="hidden"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div id="text"></div>
+        <div id="disclaimer" class="hidden"></div>
+        <ul id="sources" class="hidden"></ul>
+      </div>
+      <div id="actions" class="hidden">
+        <button id="retry" class="ghost">この語句じゃない?選び直す</button>
+        <button id="save" class="ghost">辞書に登録</button>
+      </div>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>
