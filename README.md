@@ -28,7 +28,13 @@
 
 > AIによる説明のため、誤りを含む場合があります。断定を避ける言い回しや「情報が不十分で断定できません」という回答が出ることがありますが、これはハルシネーション対策としての意図的な挙動です。
 
-## セットアップ
+## ダウンロード
+
+Node.jsのインストールやコマンド操作なしで使いたい場合は、[Releases](https://github.com/yooogeee16/concierge/releases) ページから `Concierge Setup x.x.x.exe` をダウンロードして実行してください(現時点ではWindows向けのみ配布しています)。
+
+> 署名なしビルドのため、初回起動時に「発行元を確認できません」等の警告が出ることがあります。「詳細情報」→「実行」で起動できます。
+
+## 開発者向け: ソースから実行
 
 - [Node.js](https://nodejs.org/) 18以降 / npm
 
@@ -89,6 +95,25 @@ concierge/
     ├── popup/                             # 解説吹き出しウィンドウ
     ├── setup/                              # 初期設定ウィンドウ
     └── dictionary/                          # 辞書ウィンドウ
+```
+
+## インストーラーのビルド
+
+[electron-builder](https://www.electron.build/) を使ってWindows用インストーラー(NSIS、.exe)を生成できます。
+
+```bash
+npm run dist:win
+```
+
+生成物は `dist/` に出力されます(Gitには含まれません)。
+
+### リリースの自動公開
+
+`v` から始まるタグ(例: `v0.2.0`)をpushすると、GitHub Actions(`.github/workflows/release.yml`)がWindows用インストーラーをビルドし、自動的に [Releases](https://github.com/yooogeee16/concierge/releases) に公開します。
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 ## 既知の制限
