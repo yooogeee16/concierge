@@ -42,22 +42,54 @@ async function recognizeNear(buffer, cx, cy) {
   };
 }
 
-// 日本語はTesseractが単語間に余計な空白を挟むことがあるため詰め、
-// 英数字混じりの場合は単語区切りとして空白を残す(全角/半角混在の簡易判定)。
-function cleanRegionText(raw) {
-  const text = (raw || '').trim();
-  if (!text) return '';
-  const hasLatin = /[A-Za-z]/.test(text);
-  const collapsed = hasLatin ? text.replace(/\s+/g, ' ') : text.replace(/\s+/g, '');
-  return collapsed.trim();
+// 単語のバウンディングボックスのうち、どれだけの割合が指定範囲(sel)と重なっているか
+function overlapFraction(bbox, sel) {
+  const ox0 = Math.max(bbox.x0, sel.x);
+  const oy0 = Math.max(bbox.y0, sel.y);
+  const ox1 = Math.min(bbox.x1, sel.x + sel.width);
+  const oy1 = Math.min(bbox.y1, sel.y + sel.height);
+  const overlapW = Math.max(0, ox1 - ox0);
+  const overlapH = Math.max(0, oy1 - oy0);
+  const bboxArea = Math.max(1, (bbox.x1 - bbox.x0) * (bbox.y1 - bbox.y0));
+  return (overlapW * overlapH) / bboxArea;
 }
 
-// ユーザーがマーカーでドラッグ指定した範囲を丸ごとOCRし、
-// 単語境界の誤検出(例:「サーバーコンソリデーション」の一部の「ン」だけを拾う)を避ける。
-async function recognizeRegion(buffer) {
+// 読み順(行→行内の左から右)に並べつつ、英数字混じりの場合だけ単語間に空白を入れる
+function joinWordsInReadingOrder(words) {
+  const sorted = [...words].sort((a, b) => {
+    const lineHeight = Math.max(1, a.bbox.y1 - a.bbox.y0);
+    const dy = a.bbox.y0 - b.bbox.y0;
+    if (Math.abs(dy) > lineHeight * 0.6) return dy;
+    return a.bbox.x0 - b.bbox.x0;
+  });
+  let out = '';
+  for (const w of sorted) {
+    const t = (w.text || '').trim();
+    if (!t) continue;
+    if (out) {
+      const boundary = /[A-Za-z0-9]/.test(out.slice(-1)) || /[A-Za-z0-9]/.test(t[0]);
+      if (boundary) out += ' ';
+    }
+    out += t;
+  }
+  return out.trim();
+}
+
+const OVERLAP_THRESHOLD = 0.5; // 単語のバウンディングボックスの半分以上が範囲内にあれば採用する
+
+// ユーザーがマーカーでドラッグ指定した範囲を丸ごとOCRし、その中で単語境界の
+// 誤検出(例:「サーバーコンソリデーション」の一部の「ン」だけを拾う)を避けつつ、
+// 指定範囲の外側にはみ出しただけの単語(例:隣接する別のテキストが余白に写り込んだもの)は除外する。
+async function recognizeRegion(buffer, selection) {
   const worker = await getWorker();
   const { data } = await worker.recognize(buffer);
-  const text = cleanRegionText(data.text);
+  const words = (data.words || []).filter((w) => w.text && w.text.trim());
+  if (words.length === 0) return null;
+
+  const kept = selection ? words.filter((w) => overlapFraction(w.bbox, selection) >= OVERLAP_THRESHOLD) : words;
+  if (kept.length === 0) return null;
+
+  const text = joinWordsInReadingOrder(kept);
   if (!text) return null;
 
   const term = text.slice(0, MAX_REGION_TERM_LENGTH);

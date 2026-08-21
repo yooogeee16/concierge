@@ -48,7 +48,9 @@ async function captureAroundPoint(point) {
   return { buffer: cropped.toPNG(), cx: localX - x, cy: localY - y };
 }
 
-// ユーザーがマーカーでドラッグ指定した矩形(スクリーン座標)をそのまま切り出す
+// ユーザーがマーカーでドラッグ指定した矩形(スクリーン座標)を、文字が切れないよう
+// 少し余白を付けて切り出す。OCR結果を「指定範囲内」だけに絞り込めるよう、
+// 切り出した画像内での指定範囲自体の座標(selection)も一緒に返す。
 async function captureRegion(rect) {
   const centerPoint = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
   const snap = await getDisplaySnapshot(centerPoint);
@@ -58,18 +60,31 @@ async function captureRegion(rect) {
   const scaleX = size.width / display.size.width;
   const scaleY = size.height / display.size.height;
 
-  let x = Math.round((rect.x - display.bounds.x) * scaleX) - REGION_PADDING;
-  let y = Math.round((rect.y - display.bounds.y) * scaleY) - REGION_PADDING;
-  let w = Math.round(rect.width * scaleX) + REGION_PADDING * 2;
-  let h = Math.round(rect.height * scaleY) + REGION_PADDING * 2;
+  const selX = (rect.x - display.bounds.x) * scaleX;
+  const selY = (rect.y - display.bounds.y) * scaleY;
+  const selW = rect.width * scaleX;
+  const selH = rect.height * scaleY;
 
-  x = Math.max(0, Math.min(size.width - 1, x));
-  y = Math.max(0, Math.min(size.height - 1, y));
-  w = Math.max(1, Math.min(size.width - x, w));
-  h = Math.max(1, Math.min(size.height - y, h));
+  let cropX = Math.round(selX - REGION_PADDING);
+  let cropY = Math.round(selY - REGION_PADDING);
+  let cropW = Math.round(selW) + REGION_PADDING * 2;
+  let cropH = Math.round(selH) + REGION_PADDING * 2;
 
-  const cropped = img.crop({ x, y, width: w, height: h });
-  return { buffer: cropped.toPNG() };
+  cropX = Math.max(0, Math.min(size.width - 1, cropX));
+  cropY = Math.max(0, Math.min(size.height - 1, cropY));
+  cropW = Math.max(1, Math.min(size.width - cropX, cropW));
+  cropH = Math.max(1, Math.min(size.height - cropY, cropH));
+
+  const cropped = img.crop({ x: cropX, y: cropY, width: cropW, height: cropH });
+
+  const selection = {
+    x: selX - cropX,
+    y: selY - cropY,
+    width: selW,
+    height: selH,
+  };
+
+  return { buffer: cropped.toPNG(), selection };
 }
 
 module.exports = { captureAroundPoint, captureRegion };

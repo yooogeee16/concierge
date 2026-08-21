@@ -382,7 +382,7 @@ async function handleLookupSelect(localRect) {
         updatePopup({ status: 'error', error: '画面のキャプチャに失敗しました。', persona });
         return;
       }
-      rec = await ocr.recognizeRegion(shot.buffer);
+      rec = await ocr.recognizeRegion(shot.buffer, shot.selection);
     } else {
       // 単純なクリックの場合は、これまで通りクリック位置に最も近い単語を拾う
       const shot = await screenshot.captureAroundPoint(anchorPoint);
