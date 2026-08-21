@@ -219,10 +219,12 @@ function getVirtualScreenBounds() {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
+let overlayBounds = null;
+
 function createOverlayWindow() {
-  const bounds = getVirtualScreenBounds();
+  overlayBounds = getVirtualScreenBounds();
   overlayWindow = new BrowserWindow({
-    ...bounds,
+    ...overlayBounds,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -340,22 +342,57 @@ function toggleLookupMode() {
   else enterLookupMode();
 }
 
-async function handleLookupClick() {
+const DRAG_THRESHOLD_PX = 6; // これ未満の移動は「クリック」として扱う(単語スナップ検出)
+
+// overlayのローカル座標(x0,y0,x1,y1)を、ディスプレイ間の位置ずれを考慮したスクリーン座標に変換する
+function localRectToScreen(localRect) {
+  const ox = overlayBounds ? overlayBounds.x : 0;
+  const oy = overlayBounds ? overlayBounds.y : 0;
+  const x0 = localRect.x0 + ox;
+  const y0 = localRect.y0 + oy;
+  const x1 = localRect.x1 + ox;
+  const y1 = localRect.y1 + oy;
+  return {
+    x: Math.min(x0, x1),
+    y: Math.min(y0, y1),
+    width: Math.abs(x1 - x0),
+    height: Math.abs(y1 - y0),
+  };
+}
+
+async function handleLookupSelect(localRect) {
   if (busy) return;
   busy = true;
   lastResult = null;
-  const point = screen.getCursorScreenPoint();
+
+  const rect = localRectToScreen(localRect);
+  const isDrag = rect.width > DRAG_THRESHOLD_PX || rect.height > DRAG_THRESHOLD_PX;
+  const anchorPoint = { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
+
   const persona = getPersona(currentCharacter);
   sendMascotState({ mode: 'lookup', thinking: true });
-  showPopup(point, { status: 'loading', persona });
+  showPopup(anchorPoint, { status: 'loading', persona });
 
   try {
-    const shot = await screenshot.captureAroundPoint(point);
-    if (!shot) {
-      updatePopup({ status: 'error', error: '画面のキャプチャに失敗しました。', persona });
-      return;
+    let rec;
+    if (isDrag) {
+      // マーカーでドラッグした範囲をそのままOCRする(単語区切りの誤検出を避けられる)
+      const shot = await screenshot.captureRegion(rect);
+      if (!shot) {
+        updatePopup({ status: 'error', error: '画面のキャプチャに失敗しました。', persona });
+        return;
+      }
+      rec = await ocr.recognizeRegion(shot.buffer);
+    } else {
+      // 単純なクリックの場合は、これまで通りクリック位置に最も近い単語を拾う
+      const shot = await screenshot.captureAroundPoint(anchorPoint);
+      if (!shot) {
+        updatePopup({ status: 'error', error: '画面のキャプチャに失敗しました。', persona });
+        return;
+      }
+      rec = await ocr.recognizeNear(shot.buffer, shot.cx, shot.cy);
     }
-    const rec = await ocr.recognizeNear(shot.buffer, shot.cx, shot.cy);
+
     if (!rec) {
       updatePopup({ status: 'empty', persona });
       return;
@@ -527,7 +564,7 @@ app.on('before-quit', () => {
 ipcMain.on('mascot:toggle-lookup', () => toggleLookupMode());
 ipcMain.on('mascot:context-menu', () => buildContextMenu().popup({ window: mascotWindow }));
 
-ipcMain.on('lookup:click', () => handleLookupClick());
+ipcMain.on('lookup:select', (_event, rect) => handleLookupSelect(rect));
 ipcMain.on('lookup:cancel', () => exitLookupMode());
 
 ipcMain.on('popup:content-size', (_event, size) => {

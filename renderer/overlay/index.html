@@ -13,9 +13,20 @@
         background: transparent;
         cursor: crosshair;
       }
+      #marker {
+        position: fixed;
+        background: rgba(255, 224, 40, 0.35);
+        border: 2px solid rgba(240, 200, 60, 0.9);
+        border-radius: 2px;
+        pointer-events: none;
+      }
+      #marker.hidden {
+        display: none;
+      }
     </style>
   </head>
   <body>
+    <div id="marker" class="hidden"></div>
     <script src="renderer.js"></script>
   </body>
 </html>

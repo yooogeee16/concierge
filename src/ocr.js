@@ -3,6 +3,7 @@ const { createWorker } = require('tesseract.js');
 const { app } = require('electron');
 
 const NEAR_THRESHOLD_PX = 90; // クリック位置からこれ以上離れた単語は無関係とみなす
+const MAX_REGION_TERM_LENGTH = 60; // ドラッグ範囲から拾う語句の上限文字数(暴走防止)
 
 let workerPromise = null;
 
@@ -41,6 +42,28 @@ async function recognizeNear(buffer, cx, cy) {
   };
 }
 
+// 日本語はTesseractが単語間に余計な空白を挟むことがあるため詰め、
+// 英数字混じりの場合は単語区切りとして空白を残す(全角/半角混在の簡易判定)。
+function cleanRegionText(raw) {
+  const text = (raw || '').trim();
+  if (!text) return '';
+  const hasLatin = /[A-Za-z]/.test(text);
+  const collapsed = hasLatin ? text.replace(/\s+/g, ' ') : text.replace(/\s+/g, '');
+  return collapsed.trim();
+}
+
+// ユーザーがマーカーでドラッグ指定した範囲を丸ごとOCRし、
+// 単語境界の誤検出(例:「サーバーコンソリデーション」の一部の「ン」だけを拾う)を避ける。
+async function recognizeRegion(buffer) {
+  const worker = await getWorker();
+  const { data } = await worker.recognize(buffer);
+  const text = cleanRegionText(data.text);
+  if (!text) return null;
+
+  const term = text.slice(0, MAX_REGION_TERM_LENGTH);
+  return { term, contextLine: text.slice(0, 200) };
+}
+
 async function terminate() {
   if (workerPromise) {
     const w = await workerPromise;
@@ -49,4 +72,4 @@ async function terminate() {
   }
 }
 
-module.exports = { recognizeNear, terminate };
+module.exports = { recognizeNear, recognizeRegion, terminate };

@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('overlayAPI', {
-  click: () => ipcRenderer.send('lookup:click'),
+  select: (rect) => ipcRenderer.send('lookup:select', rect),
   cancel: () => ipcRenderer.send('lookup:cancel'),
 });
