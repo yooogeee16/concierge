@@ -674,7 +674,7 @@ ipcMain.handle('code:analyze', async (_event, { filename, content }) => {
 
   const analysis = codeAnalyzer.analyzeCode(filename, content);
   if (analysis.languageId === 'unknown') {
-    return { ok: false, error: '対応していないファイル形式です(JavaScript / TypeScript / Python / Cに対応しています)。' };
+    return { ok: false, error: '対応していないファイル形式です(JavaScript / TypeScript / Python / C / C++ / C#に対応しています)。' };
   }
 
   codedex.recordEncounters(app, analysis);

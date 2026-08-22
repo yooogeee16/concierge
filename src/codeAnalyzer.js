@@ -1,15 +1,26 @@
 const { findLibraryCatalogEntry } = require('./codeCatalog');
-const { detectLibraryObjects } = require('./codeLibraryObjects');
+const { detectGroupObjects } = require('./codeObjectGroups');
 
 const EXT_LANG = {
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
   ts: 'typescript', tsx: 'typescript',
   py: 'python',
   c: 'c', h: 'c',
+  cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp', hh: 'cpp',
+  cs: 'csharp',
 };
-const LANG_LABEL = { javascript: 'JavaScript', typescript: 'TypeScript', python: 'Python', c: 'C' };
+const LANG_LABEL = {
+  javascript: 'JavaScript',
+  typescript: 'TypeScript',
+  python: 'Python',
+  c: 'C',
+  cpp: 'C++',
+  csharp: 'C#',
+};
 const JS_FAMILY = new Set(['javascript', 'typescript']);
 const C_CONTROL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'return']);
+const CPP_CONTROL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'return', 'catch']);
+const CSHARP_CONTROL_KEYWORDS = new Set(['if', 'for', 'foreach', 'while', 'switch', 'catch', 'using', 'lock', 'return']);
 
 const MAX_CODE_CHARS = 8000; // Gemini/表示に渡す上限(暴走・長すぎるプロンプト防止)
 const MAX_NAMED_ITEMS = 12; // 個別に解説を依頼する関数/クラスの上限
@@ -110,6 +121,105 @@ function extractNamedItemsC(code) {
   return items;
 }
 
+// C++はfunctionキーワードを持たないが、classとtry/catchは持つ。Cの検出方式に
+// テンプレート/名前空間/ラムダ/列挙型の検出を足す。
+function analyzeSyntaxCpp(code) {
+  const counts = {};
+  const funcDefRe = /\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?\{/g;
+  let funcCount = 0;
+  let m;
+  while ((m = funcDefRe.exec(code))) {
+    if (!CPP_CONTROL_KEYWORDS.has(m[1])) funcCount++;
+  }
+  counts.function = funcCount;
+  counts.class = countMatches(/\bclass\s+\w+/g, code);
+  counts.struct = countMatches(/\bstruct\s+\w+\s*\{/g, code);
+  counts.pointer = countMatches(/\w\s*\*\s*\w/g, code) + countMatches(/&\w/g, code);
+  counts.conditional = countMatches(/\bif\s*\(/g, code) + countMatches(/\bswitch\s*\(/g, code);
+  counts.loop = countMatches(/\bfor\s*\(/g, code) + countMatches(/\bwhile\s*\(/g, code) + countMatches(/\bdo\s*\{/g, code);
+  counts.exception_handling = countMatches(/\btry\s*\{/g, code) + countMatches(/\bcatch\s*\(/g, code);
+  counts.module_import = countMatches(/#include\s*[<"][^">]+[>"]/g, code);
+  counts.namespace = countMatches(/\bnamespace\s+\w+\s*\{/g, code);
+  counts.generics = countMatches(/\btemplate\s*</g, code);
+  counts.enum = countMatches(/\benum\s+(?:class\s+)?\w+/g, code);
+  counts.lambda = countMatches(/\[[=&]?[^\]]*\]\s*\([^)]*\)\s*(?:->\s*\w+\s*)?\{/g, code);
+  counts.comment = countMatches(/\/\/.*$/gm, code) + countMatches(/\/\*[\s\S]*?\*\//g, code);
+  return counts;
+}
+
+function extractLibrariesCpp(code) {
+  const names = [];
+  const re = /#include\s*[<"]([^">]+)[>"]/g;
+  let m;
+  while ((m = re.exec(code))) names.push(m[1]);
+  return names;
+}
+
+function extractNamedItemsCpp(code) {
+  const items = [];
+  const patterns = [
+    /(?:^|\n)\s*[A-Za-z_][\w:<>,\s*&]*?\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?\{/g,
+    /(?:^|\n)\s*class\s+(\w+)/g,
+    /(?:^|\n)\s*struct\s+(\w+)/g,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(code))) {
+      if (!CPP_CONTROL_KEYWORDS.has(m[1])) items.push({ name: m[1], line: lineAt(code, m.index) });
+    }
+  }
+  return items;
+}
+
+// C#は修飾子(public/private等)が多彩でシグネチャの厳密な検出が難しいため、
+// Cと同様「識別子(...) {」の形で近似し、代表的な制御構文キーワードだけ除外する。
+function analyzeSyntaxCsharp(code) {
+  const counts = {};
+  const funcDefRe = /\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{/g;
+  let funcCount = 0;
+  let m;
+  while ((m = funcDefRe.exec(code))) {
+    if (!CSHARP_CONTROL_KEYWORDS.has(m[1])) funcCount++;
+  }
+  counts.function = funcCount;
+  counts.class = countMatches(/\bclass\s+\w+/g, code);
+  counts.interface = countMatches(/\binterface\s+\w+/g, code);
+  counts.enum = countMatches(/\benum\s+\w+/g, code);
+  counts.conditional = countMatches(/\bif\s*\(/g, code) + countMatches(/\bswitch\s*\(/g, code);
+  counts.loop = countMatches(/\bfor\s*\(/g, code) + countMatches(/\bforeach\s*\(/g, code) + countMatches(/\bwhile\s*\(/g, code);
+  counts.async = countMatches(/\basync\b/g, code) + countMatches(/\bawait\b/g, code);
+  counts.exception_handling = countMatches(/\btry\s*\{/g, code) + countMatches(/\bcatch\s*\(/g, code);
+  counts.module_import = countMatches(/^\s*using\s+[\w.]+\s*;/gm, code);
+  counts.namespace = countMatches(/\bnamespace\s+[\w.]+/g, code);
+  counts.generics = countMatches(/\w<[A-Za-z_][\w,\s<>]*>/g, code);
+  counts.lambda = countMatches(/=>/g, code);
+  counts.comment = countMatches(/\/\/.*$/gm, code) + countMatches(/\/\*[\s\S]*?\*\//g, code);
+  return counts;
+}
+
+function extractLibrariesCsharp(code) {
+  const names = [];
+  const re = /^\s*using\s+([\w.]+)\s*;/gm;
+  let m;
+  while ((m = re.exec(code))) names.push(m[1].split('.')[0]);
+  return names;
+}
+
+function extractNamedItemsCsharp(code) {
+  const items = [];
+  const patterns = [
+    /(?:^|\n)\s*[A-Za-z_][\w<>[\],\s]*?\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{/g,
+    /(?:^|\n)\s*(?:public\s+|private\s+|internal\s+|protected\s+)?(?:class|interface)\s+(\w+)/g,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(code))) {
+      if (!CSHARP_CONTROL_KEYWORDS.has(m[1])) items.push({ name: m[1], line: lineAt(code, m.index) });
+    }
+  }
+  return items;
+}
+
 function extractLibrariesJs(code) {
   const names = [];
   const importRe = /import\s+(?:[\s\S]*?)from\s+['"]([^'"]+)['"]/g;
@@ -178,6 +288,14 @@ function analyzeCode(filename, rawCode) {
     syntaxCounts = analyzeSyntaxC(code);
     libraryNames = extractLibrariesC(code);
     namedItems = extractNamedItemsC(code);
+  } else if (languageId === 'cpp') {
+    syntaxCounts = analyzeSyntaxCpp(code);
+    libraryNames = extractLibrariesCpp(code);
+    namedItems = extractNamedItemsCpp(code);
+  } else if (languageId === 'csharp') {
+    syntaxCounts = analyzeSyntaxCsharp(code);
+    libraryNames = extractLibrariesCsharp(code);
+    namedItems = extractNamedItemsCsharp(code);
   }
 
   const syntax = Object.entries(syntaxCounts)
@@ -195,14 +313,9 @@ function analyzeCode(filename, rawCode) {
     }
   }
 
-  // Reactやpandasなど、詳しい図鑑を用意しているライブラリがimportされていれば、
-  // そのライブラリの具体的なAPI(フック/メソッドなど)の使用状況もコード全体から数える
-  const libraryObjects = [];
-  for (const key of libraryCounts.keys()) {
-    for (const obj of detectLibraryObjects(key, code)) {
-      libraryObjects.push({ libraryKey: key, key: obj.key, count: obj.count });
-    }
-  }
+  // React/pandasなどimportされたライブラリ、およびJavaScript/TypeScript/C++/C#といった
+  // 言語そのものについて、詳しい図鑑があるものはコード全体から具体的なAPI/構文の使用を数える
+  const objectGroups = detectGroupObjects({ languageId, importedLibraryKeys: new Set(libraryCounts.keys()) }, code);
 
   return {
     languageId,
@@ -212,7 +325,7 @@ function analyzeCode(filename, rawCode) {
     syntax,
     libraries: [...libraryCounts.entries()].map(([key, count]) => ({ key, count })),
     unknownLibraries: [...unknownCounts.entries()].map(([name, count]) => ({ name, count })),
-    libraryObjects,
+    objectGroups,
     namedItems: namedItems.slice(0, MAX_NAMED_ITEMS),
   };
 }

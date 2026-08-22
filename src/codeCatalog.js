@@ -15,6 +15,11 @@ const SYNTAX_CATALOG = [
   { key: 'comprehension', label: '内包表記', icon: '🧮', description: 'Pythonで、ループとif文をひとまとめにしてリストなどを作る書き方。' },
   { key: 'struct', label: '構造体', icon: '🧱', description: '複数のデータをひとまとめにして扱うための型(struct)。Cなどクラスを持たない言語でよく使われる。' },
   { key: 'pointer', label: 'ポインタ', icon: '📍', description: 'メモリ上のアドレスを直接扱う仕組み(*や&)。Cや低レイヤーの言語で使われる。' },
+  { key: 'interface', label: 'インターフェース', icon: '📐', description: 'クラスが実装すべき機能の形だけを決めた設計図。TypeScriptやC#で使われる。' },
+  { key: 'enum', label: '列挙型', icon: '🔢', description: '決まった選択肢の集合に名前を付けた型(enum)。' },
+  { key: 'generics', label: 'ジェネリクス', icon: '🧬', description: '型をあとから指定できるようにする仕組み(<T>など)。同じ処理を色々な型で使い回せる。' },
+  { key: 'namespace', label: '名前空間', icon: '🗂️', description: '名前の衝突を防ぐために、関連するものをひとまとめにする仕組み。' },
+  { key: 'lambda', label: 'ラムダ式', icon: 'λ', description: '名前を付けずにその場で定義する小さな関数。' },
   { key: 'comment', label: 'コメント', icon: '💬', description: '実行はされない、人間向けのメモ書き。' },
 ];
 
@@ -43,6 +48,16 @@ const LIBRARY_CATALOG = [
   { key: 'string_h', match: ['string.h'], label: 'string.h', icon: '🔤', description: '文字列のコピー・比較などを行うCの標準ライブラリ。' },
   { key: 'math_h', match: ['math.h'], label: 'math.h', icon: '➗', description: 'sqrtやpowなど数学関数を提供するCの標準ライブラリ。' },
   { key: 'pthread', match: ['pthread.h'], label: 'pthread.h', icon: '🧵', description: 'マルチスレッド処理を行うためのCのライブラリ。' },
+  { key: 'boost', match: ['boost'], label: 'Boost', icon: '🧰', description: 'C++の定番汎用ライブラリ集(スマートポインタ・文字列処理など)。' },
+  { key: 'opencv', match: ['opencv2', 'opencv'], label: 'OpenCV', icon: '📷', description: '画像処理・コンピュータビジョンを行うためのライブラリ。' },
+  { key: 'eigen', match: ['eigen'], label: 'Eigen', icon: '🧮', description: '行列演算・線形代数を行うC++ライブラリ。' },
+  { key: 'dotnet_system', match: ['system'], label: '.NET (System)', icon: '🔷', description: 'C#/.NETの基本機能(コレクション・LINQ・非同期処理など)を提供する標準ライブラリ群。' },
+  { key: 'newtonsoft', match: ['newtonsoft'], label: 'Newtonsoft.Json', icon: '🧾', description: 'C#でJSONを扱うための定番ライブラリ。' },
+  { key: 'dotnet_microsoft', match: ['microsoft'], label: '.NET (Microsoft.*)', icon: '🪟', description: 'ASP.NET CoreやEntity FrameworkなどMicrosoft製の.NETライブラリ群。' },
+  { key: 'dapper', match: ['dapper'], label: 'Dapper', icon: '🗄️', description: 'C#で手軽にSQLを実行できる軽量ORライブラリ。' },
+  { key: 'automapper', match: ['automapper'], label: 'AutoMapper', icon: '🔁', description: 'オブジェクト間の値のコピー(マッピング)を自動化するC#ライブラリ。' },
+  { key: 'serilog', match: ['serilog'], label: 'Serilog', icon: '📝', description: '構造化ログを出力するためのC#ライブラリ。' },
+  { key: 'xunit', match: ['xunit'], label: 'xUnit', icon: '✅', description: 'C#のテストコードを書くためのテストフレームワーク。' },
 ];
 
 function findLibraryCatalogEntry(importName) {

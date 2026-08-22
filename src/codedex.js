@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { SYNTAX_CATALOG, LIBRARY_CATALOG } = require('./codeCatalog');
-const { LIBRARY_GROUPS } = require('./codeLibraryObjects');
+const { GROUPS } = require('./codeObjectGroups');
 
 function getPath(app) {
   return path.join(app.getPath('userData'), 'codedex.json');
@@ -21,11 +21,11 @@ function save(app, state) {
   fs.writeFileSync(p, JSON.stringify(state, null, 2), 'utf-8');
 }
 
-function objectStoreKey(libraryKey, key) {
-  return `${libraryKey}:${key}`;
+function objectStoreKey(groupKey, key) {
+  return `${groupKey}:${key}`;
 }
 
-// 解析結果(syntax/libraries/unknownLibraries/libraryObjects)を図鑑の集計に反映する
+// 解析結果(syntax/libraries/unknownLibraries/objectGroups)を図鑑の集計に反映する
 function recordEncounters(app, analysis) {
   const state = load(app);
   const now = new Date().toISOString();
@@ -42,8 +42,8 @@ function recordEncounters(app, analysis) {
     state.unknown[name] = (state.unknown[name] || 0) + count;
     state.lastSeenAt[`unknown:${name}`] = now;
   }
-  for (const { libraryKey, key, count } of analysis.libraryObjects || []) {
-    const storeKey = objectStoreKey(libraryKey, key);
+  for (const { groupKey, key, count } of analysis.objectGroups || []) {
+    const storeKey = objectStoreKey(groupKey, key);
     state.counts[storeKey] = (state.counts[storeKey] || 0) + count;
     state.lastSeenAt[storeKey] = now;
   }
@@ -73,13 +73,14 @@ function getDexEntries(app) {
     });
   }
 
-  // React/pandas/NumPy/Expressなど、詳しい図鑑があるライブラリは専用グループにまとめる
-  for (const [groupKey, group] of Object.entries(LIBRARY_GROUPS)) {
+  // React/pandas/NumPy/Express/Electron(import単位)や、JavaScript/TypeScript/C++/C#
+  // (言語単位)など、詳しい図鑑があるものは専用グループにまとめる
+  for (const [groupKey, group] of Object.entries(GROUPS)) {
     for (const obj of group.objects) {
       const storeKey = objectStoreKey(groupKey, obj.key);
       entries.push({
         key: storeKey,
-        category: 'library',
+        category: group.gate === 'import' ? 'library' : 'language',
         group: groupKey,
         groupLabel: group.label,
         groupIcon: group.icon,
@@ -94,7 +95,7 @@ function getDexEntries(app) {
 
   // 詳しい図鑑を持たないライブラリは「その他ライブラリ」として1枚のカードにまとめる
   for (const item of LIBRARY_CATALOG) {
-    if (LIBRARY_GROUPS[item.key]) continue;
+    if (GROUPS[item.key]) continue;
     entries.push({
       key: item.key,
       category: 'library',
