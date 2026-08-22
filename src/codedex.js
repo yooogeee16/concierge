@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { SYNTAX_CATALOG, LIBRARY_CATALOG } = require('./codeCatalog');
+const { LIBRARY_GROUPS } = require('./codeLibraryObjects');
 
 function getPath(app) {
   return path.join(app.getPath('userData'), 'codedex.json');
@@ -20,7 +21,11 @@ function save(app, state) {
   fs.writeFileSync(p, JSON.stringify(state, null, 2), 'utf-8');
 }
 
-// 解析結果(syntax/libraries/unknownLibraries)を図鑑の集計に反映する
+function objectStoreKey(libraryKey, key) {
+  return `${libraryKey}:${key}`;
+}
+
+// 解析結果(syntax/libraries/unknownLibraries/libraryObjects)を図鑑の集計に反映する
 function recordEncounters(app, analysis) {
   const state = load(app);
   const now = new Date().toISOString();
@@ -37,12 +42,18 @@ function recordEncounters(app, analysis) {
     state.unknown[name] = (state.unknown[name] || 0) + count;
     state.lastSeenAt[`unknown:${name}`] = now;
   }
+  for (const { libraryKey, key, count } of analysis.libraryObjects || []) {
+    const storeKey = objectStoreKey(libraryKey, key);
+    state.counts[storeKey] = (state.counts[storeKey] || 0) + count;
+    state.lastSeenAt[storeKey] = now;
+  }
 
   save(app, state);
   return state;
 }
 
-// 静的カタログ(既知の種族一覧)に現在のカウントを重ねて、図鑑表示用の一覧を作る
+// 静的カタログ(既知の種族一覧)に現在のカウントを重ねて、図鑑表示用の一覧を作る。
+// group/groupLabel/groupIconで、どの「図鑑(コレクション)」に属するかをUI側でまとめられるようにする。
 function getDexEntries(app) {
   const state = load(app);
   const entries = [];
@@ -51,6 +62,9 @@ function getDexEntries(app) {
     entries.push({
       key: item.key,
       category: 'syntax',
+      group: 'syntax',
+      groupLabel: '文法要素',
+      groupIcon: '📘',
       label: item.label,
       icon: item.icon,
       description: item.description,
@@ -58,10 +72,35 @@ function getDexEntries(app) {
       lastSeenAt: state.lastSeenAt[item.key] || null,
     });
   }
+
+  // React/pandas/NumPy/Expressなど、詳しい図鑑があるライブラリは専用グループにまとめる
+  for (const [groupKey, group] of Object.entries(LIBRARY_GROUPS)) {
+    for (const obj of group.objects) {
+      const storeKey = objectStoreKey(groupKey, obj.key);
+      entries.push({
+        key: storeKey,
+        category: 'library',
+        group: groupKey,
+        groupLabel: group.label,
+        groupIcon: group.icon,
+        label: obj.label,
+        icon: obj.icon,
+        description: obj.description,
+        count: state.counts[storeKey] || 0,
+        lastSeenAt: state.lastSeenAt[storeKey] || null,
+      });
+    }
+  }
+
+  // 詳しい図鑑を持たないライブラリは「その他ライブラリ」として1枚のカードにまとめる
   for (const item of LIBRARY_CATALOG) {
+    if (LIBRARY_GROUPS[item.key]) continue;
     entries.push({
       key: item.key,
       category: 'library',
+      group: 'misc-library',
+      groupLabel: 'その他ライブラリ',
+      groupIcon: '📚',
       label: item.label,
       icon: item.icon,
       description: item.description,
@@ -73,6 +112,9 @@ function getDexEntries(app) {
     entries.push({
       key: `unknown:${name}`,
       category: 'library',
+      group: 'misc-library',
+      groupLabel: 'その他ライブラリ',
+      groupIcon: '📚',
       label: name,
       icon: '❓',
       description: '図鑑にはまだ登録されていないライブラリ/パッケージです。',

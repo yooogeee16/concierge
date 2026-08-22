@@ -1,4 +1,5 @@
 const { findLibraryCatalogEntry } = require('./codeCatalog');
+const { detectLibraryObjects } = require('./codeLibraryObjects');
 
 const EXT_LANG = {
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
@@ -194,6 +195,15 @@ function analyzeCode(filename, rawCode) {
     }
   }
 
+  // Reactやpandasなど、詳しい図鑑を用意しているライブラリがimportされていれば、
+  // そのライブラリの具体的なAPI(フック/メソッドなど)の使用状況もコード全体から数える
+  const libraryObjects = [];
+  for (const key of libraryCounts.keys()) {
+    for (const obj of detectLibraryObjects(key, code)) {
+      libraryObjects.push({ libraryKey: key, key: obj.key, count: obj.count });
+    }
+  }
+
   return {
     languageId,
     languageLabel,
@@ -202,6 +212,7 @@ function analyzeCode(filename, rawCode) {
     syntax,
     libraries: [...libraryCounts.entries()].map(([key, count]) => ({ key, count })),
     unknownLibraries: [...unknownCounts.entries()].map(([name, count]) => ({ name, count })),
+    libraryObjects,
     namedItems: namedItems.slice(0, MAX_NAMED_ITEMS),
   };
 }

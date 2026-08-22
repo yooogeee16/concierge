@@ -11,44 +11,55 @@ header { padding: 18px 22px 6px; display: flex; align-items: baseline; justify-c
 h1 { font-size: 17px; margin: 0; color: #1e3a5f; }
 #stats { font-size: 12px; color: #7a8290; }
 
-#controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 22px 12px;
-}
+#controls { padding: 0 22px 14px; }
 #search {
-  flex: 1;
+  width: 100%;
   padding: 8px 12px;
   border: 1px solid rgba(30, 58, 95, 0.3);
   border-radius: 8px;
   font-size: 12.5px;
 }
-#tabs { display: flex; gap: 4px; }
-.tab {
-  border: 1px solid rgba(30, 58, 95, 0.3);
-  background: transparent;
-  color: #1e3a5f;
-  font-size: 11.5px;
-  padding: 6px 12px;
-  border-radius: 14px;
-  cursor: pointer;
-}
-.tab.active { background: #1e3a5f; color: #fff; }
 
-#grid {
+#sections { padding: 0 22px 24px; }
+
+.section { margin-bottom: 22px; }
+.section.empty { display: none; }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.section-icon { font-size: 18px; }
+.section-title { font-weight: 700; font-size: 13.5px; color: #1e3a5f; }
+.section-progress-text { font-size: 11px; color: #7a8290; margin-left: auto; }
+
+.progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(30, 58, 95, 0.12);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f0c869, #1e3a5f);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-  padding: 0 22px 24px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
 }
 
 .dex-card {
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(30, 58, 95, 0.18);
   border-radius: 12px;
-  padding: 12px;
+  padding: 10px;
   text-align: center;
   transition: transform 0.1s ease;
 }
@@ -57,20 +68,20 @@ h1 { font-size: 17px; margin: 0; color: #1e3a5f; }
 .dex-card.undiscovered {
   background: rgba(0, 0, 0, 0.04);
   filter: grayscale(1);
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
-.dex-icon { font-size: 30px; margin-bottom: 6px; }
-.dex-label { font-weight: 700; font-size: 12.5px; margin-bottom: 4px; }
-.dex-desc { font-size: 10.5px; color: #6b7280; min-height: 28px; }
+.dex-icon { font-size: 24px; margin-bottom: 4px; }
+.dex-label { font-weight: 700; font-size: 11.5px; margin-bottom: 3px; word-break: break-word; }
+.dex-desc { font-size: 10px; color: #6b7280; min-height: 26px; }
 .dex-count {
   display: inline-block;
-  margin-top: 6px;
+  margin-top: 5px;
   background: #f0c869;
   color: #1e3a5f;
   font-weight: 700;
-  font-size: 11px;
-  padding: 2px 8px;
+  font-size: 10.5px;
+  padding: 2px 7px;
   border-radius: 10px;
 }
 .dex-card.undiscovered .dex-count { background: rgba(0, 0, 0, 0.15); color: #555; }
