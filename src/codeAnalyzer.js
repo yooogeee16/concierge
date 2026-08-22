@@ -4,9 +4,11 @@ const EXT_LANG = {
   js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
   ts: 'typescript', tsx: 'typescript',
   py: 'python',
+  c: 'c', h: 'c',
 };
-const LANG_LABEL = { javascript: 'JavaScript', typescript: 'TypeScript', python: 'Python' };
+const LANG_LABEL = { javascript: 'JavaScript', typescript: 'TypeScript', python: 'Python', c: 'C' };
 const JS_FAMILY = new Set(['javascript', 'typescript']);
+const C_CONTROL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'return']);
 
 const MAX_CODE_CHARS = 8000; // Gemini/表示に渡す上限(暴走・長すぎるプロンプト防止)
 const MAX_NAMED_ITEMS = 12; // 個別に解説を依頼する関数/クラスの上限
@@ -67,6 +69,44 @@ function analyzeSyntaxPython(code) {
     countMatches(/\([^()]*\bfor\b[^()]*\bin\b[^()]*\)/g, code);
   counts.comment = countMatches(/#.*/g, code) + countMatches(/"""[\s\S]*?"""/g, code) + countMatches(/'''[\s\S]*?'''/g, code);
   return counts;
+}
+
+// C言語はfunctionキーワードやclassを持たないため、関数定義は
+// 「識別子 ( ... ) {」の形(制御構文のキーワードは除く)で近似検出する。
+function analyzeSyntaxC(code) {
+  const counts = {};
+  const funcDefRe = /\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{/g;
+  let funcCount = 0;
+  let m;
+  while ((m = funcDefRe.exec(code))) {
+    if (!C_CONTROL_KEYWORDS.has(m[1])) funcCount++;
+  }
+  counts.function = funcCount;
+  counts.struct = countMatches(/\bstruct\s+\w+\s*\{/g, code);
+  counts.pointer = countMatches(/\w\s*\*\s*\w/g, code) + countMatches(/&\w/g, code);
+  counts.conditional = countMatches(/\bif\s*\(/g, code) + countMatches(/\bswitch\s*\(/g, code);
+  counts.loop = countMatches(/\bfor\s*\(/g, code) + countMatches(/\bwhile\s*\(/g, code) + countMatches(/\bdo\s*\{/g, code);
+  counts.module_import = countMatches(/#include\s*[<"][^">]+[>"]/g, code);
+  counts.comment = countMatches(/\/\/.*$/gm, code) + countMatches(/\/\*[\s\S]*?\*\//g, code);
+  return counts;
+}
+
+function extractLibrariesC(code) {
+  const names = [];
+  const re = /#include\s*[<"]([^">]+)[>"]/g;
+  let m;
+  while ((m = re.exec(code))) names.push(m[1]);
+  return names;
+}
+
+function extractNamedItemsC(code) {
+  const items = [];
+  const re = /(?:^|\n)\s*[A-Za-z_][\w\s*]*?\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{/g;
+  let m;
+  while ((m = re.exec(code))) {
+    if (!C_CONTROL_KEYWORDS.has(m[1])) items.push({ name: m[1], line: lineAt(code, m.index) });
+  }
+  return items;
 }
 
 function extractLibrariesJs(code) {
@@ -133,6 +173,10 @@ function analyzeCode(filename, rawCode) {
     syntaxCounts = analyzeSyntaxPython(code);
     libraryNames = extractLibrariesPython(code);
     namedItems = extractNamedItemsPython(code);
+  } else if (languageId === 'c') {
+    syntaxCounts = analyzeSyntaxC(code);
+    libraryNames = extractLibrariesC(code);
+    namedItems = extractNamedItemsC(code);
   }
 
   const syntax = Object.entries(syntaxCounts)

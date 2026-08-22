@@ -13,6 +13,8 @@ const SYNTAX_CATALOG = [
   { key: 'module_import', label: 'モジュール読み込み', icon: '📥', description: 'import/requireで、他のファイルやライブラリの機能を取り込む。' },
   { key: 'decorator', label: 'デコレータ', icon: '🎀', description: '関数やクラスに機能を後付けする、目印のような書き方(@から始まる)。' },
   { key: 'comprehension', label: '内包表記', icon: '🧮', description: 'Pythonで、ループとif文をひとまとめにしてリストなどを作る書き方。' },
+  { key: 'struct', label: '構造体', icon: '🧱', description: '複数のデータをひとまとめにして扱うための型(struct)。Cなどクラスを持たない言語でよく使われる。' },
+  { key: 'pointer', label: 'ポインタ', icon: '📍', description: 'メモリ上のアドレスを直接扱う仕組み(*や&)。Cや低レイヤーの言語で使われる。' },
   { key: 'comment', label: 'コメント', icon: '💬', description: '実行はされない、人間向けのメモ書き。' },
 ];
 
@@ -36,6 +38,11 @@ const LIBRARY_CATALOG = [
   { key: 'tensorflow', match: ['tensorflow'], label: 'TensorFlow', icon: '🧠', description: '機械学習・深層学習を行うためのライブラリ。' },
   { key: 'torch', match: ['torch'], label: 'PyTorch', icon: '🔥', description: '機械学習・深層学習を行うためのライブラリ(TensorFlowと双璧)。' },
   { key: 'requests', match: ['requests'], label: 'Requests', icon: '🌐', description: 'PythonでHTTP通信を行う定番ライブラリ。' },
+  { key: 'stdio', match: ['stdio.h'], label: 'stdio.h', icon: '🖨️', description: '標準入出力(printf/scanfなど)を扱うCの標準ライブラリ。' },
+  { key: 'stdlib', match: ['stdlib.h'], label: 'stdlib.h', icon: '🧪', description: 'メモリ確保(malloc)や文字列変換などを行うCの標準ライブラリ。' },
+  { key: 'string_h', match: ['string.h'], label: 'string.h', icon: '🔤', description: '文字列のコピー・比較などを行うCの標準ライブラリ。' },
+  { key: 'math_h', match: ['math.h'], label: 'math.h', icon: '➗', description: 'sqrtやpowなど数学関数を提供するCの標準ライブラリ。' },
+  { key: 'pthread', match: ['pthread.h'], label: 'pthread.h', icon: '🧵', description: 'マルチスレッド処理を行うためのCのライブラリ。' },
 ];
 
 function findLibraryCatalogEntry(importName) {
