@@ -12,6 +12,10 @@ const codeAnalyzer = require('./src/codeAnalyzer');
 const codedex = require('./src/codedex');
 const { getSyntaxEntry, getLibraryEntry } = require('./src/codeCatalog');
 
+// タスクバー等に出るウィンドウ用のアイコン。開発時(npm start)はElectronの
+// デフォルトアイコンではなくこちらを明示的に使う(パッケージ版はビルド設定のiconが自動で使われる)。
+const APP_ICON_PATH = path.join(__dirname, 'build', 'icon.ico');
+
 // --- レイアウト定数 ---
 const MASCOT_DISPLAY_W = 72; // マスコット画像の表示幅(SVGの縦横比 144:204 を維持して高さを決める)
 const MASCOT_DISPLAY_H = Math.round((MASCOT_DISPLAY_W * 204) / 144);
@@ -444,6 +448,7 @@ function openDictionaryWindow() {
     width: 420,
     height: 560,
     title: 'コンシェルジュ 辞書',
+    icon: APP_ICON_PATH,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload-dictionary.js'),
@@ -466,6 +471,7 @@ function openCodeWindow() {
     width: 760,
     height: 680,
     title: 'コード解説',
+    icon: APP_ICON_PATH,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload-code.js'),
@@ -488,6 +494,7 @@ function openCodedexWindow() {
     width: 780,
     height: 600,
     title: 'コード図鑑',
+    icon: APP_ICON_PATH,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload-codedex.js'),
@@ -511,6 +518,7 @@ function createSetupWindow(prefill) {
     height: 430,
     resizable: false,
     title: 'コンシェルジュ 初期設定',
+    icon: APP_ICON_PATH,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload-setup.js'),
