@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>コード解説</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="drop" tabindex="0">
+      <div id="dropIcon">🧩</div>
+      <div id="dropText">ここにコードファイルをドラッグ&ドロップ</div>
+      <div id="dropSub">またはクリックしてファイルを選択(JavaScript / TypeScript / Python)</div>
+      <input id="fileInput" type="file" accept=".js,.jsx,.ts,.tsx,.mjs,.cjs,.py" class="hidden" />
+    </div>
+
+    <div id="result" class="hidden">
+      <div id="resultHeader">
+        <div>
+          <span id="filename"></span>
+          <span id="langBadge" class="badge"></span>
+        </div>
+        <button id="reset" class="ghost">別のファイルを解析する</button>
+      </div>
+
+      <div id="summaryCard" class="card">
+        <div id="summarySpinner" class="spinner hidden"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div id="summaryText"></div>
+        <div id="summaryDisclaimer" class="disclaimer hidden">AIによる解説のため、誤りを含む場合があります。ヒューリスティックな検出のため件数は目安です。</div>
+      </div>
+
+      <div id="libraries" class="chips hidden"></div>
+
+      <div id="codeViewer"></div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

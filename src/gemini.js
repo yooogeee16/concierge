@@ -103,4 +103,89 @@ async function explainTerm({ term, contextLine, apiKey, model, tone }) {
   }
 }
 
-module.exports = { explainTerm, DEFAULT_MODEL };
+function buildCodePrompt({ languageLabel, libraryLabels, namedItems, codeExcerpt, truncated, tone }) {
+  const namedList = namedItems.map((i) => i.name).join('、') || 'なし';
+  return `あなたはプログラミング初心者にも分かりやすく教える、フレンドリーなコード解説者です。
+以下のコード(言語: ${languageLabel})について解説してください。
+
+検出されたライブラリ/フレームワーク: ${libraryLabels.join('、') || 'なし'}
+${truncated ? '(コードが長いため先頭部分のみ渡しています)' : ''}
+
+制約:
+- コードから読み取れる事実のみを述べ、読み取れないことは推測せず「不明」と書く。
+- 話し方(口調)は次の指定に従う。ただし言い回しのみに適用し、事実の正確さより優先しない: ${tone}
+- 出力は必ず次のJSON形式のみ。前置き・後書き・コードブロック記法(\`\`\`)は一切書かない。
+- "items" は下の「解説対象」に挙げた名前だけに対応させる。無い名前を新しく作らない。対象が「なし」ならitemsは空配列にする。
+
+{"summary": "ファイル全体が何をしているかの説明(120字程度)", "items": [{"name": "関数/クラス名", "explanation": "60字程度の説明"}]}
+
+解説対象: ${namedList}
+
+コード:
+${codeExcerpt}`;
+}
+
+async function explainCode({ languageLabel, libraryLabels, namedItems, codeExcerpt, truncated, apiKey, model, tone }) {
+  if (!apiKey) {
+    return { ok: false, error: 'APIキーが設定されていません。マスコットを右クリックして設定してください。' };
+  }
+  const useModel = model || DEFAULT_MODEL;
+  const useTone = tone || '丁寧語で話してください。';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{
+      role: 'user',
+      parts: [{ text: buildCodePrompt({ languageLabel, libraryLabels, namedItems, codeExcerpt, truncated, tone: useTone }) }],
+    }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: 900 },
+  };
+
+  let res;
+  try {
+    res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (err) {
+    return { ok: false, error: `通信に失敗しました: ${err.message}` };
+  }
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const j = await res.json();
+      detail = (j.error && j.error.message) || '';
+    } catch {
+      // ignore
+    }
+    return { ok: false, error: `APIエラー(${res.status}) ${detail}`.trim() };
+  }
+
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    return { ok: false, error: '応答の解析に失敗しました。' };
+  }
+
+  const candidate = json.candidates && json.candidates[0];
+  const parts = (candidate && candidate.content && candidate.content.parts) || [];
+  const rawText = parts.map((p) => p.text || '').join('').trim();
+  if (!rawText) {
+    const reason = candidate && candidate.finishReason;
+    return { ok: false, error: reason ? `解説を生成できませんでした(${reason})` : '解説を生成できませんでした。' };
+  }
+
+  const cleaned = rawText.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    return {
+      ok: true,
+      summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+      items: Array.isArray(parsed.items)
+        ? parsed.items.filter((i) => i && typeof i.name === 'string' && typeof i.explanation === 'string')
+        : [],
+    };
+  } catch {
+    // JSONとして解釈できなかった場合も、生成された文章自体は概要として活かす
+    return { ok: true, summary: cleaned.slice(0, 300), items: [] };
+  }
+}
+
+module.exports = { explainTerm, explainCode, DEFAULT_MODEL };

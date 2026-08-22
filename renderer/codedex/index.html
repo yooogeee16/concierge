@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>コード図鑑</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>コード図鑑</h1>
+      <div id="stats"></div>
+    </header>
+
+    <div id="controls">
+      <input id="search" type="text" placeholder="名前で検索…" />
+      <div id="tabs">
+        <button class="tab active" data-cat="all">すべて</button>
+        <button class="tab" data-cat="syntax">文法要素</button>
+        <button class="tab" data-cat="library">ライブラリ</button>
+      </div>
+    </div>
+
+    <div id="grid"></div>
+    <script src="renderer.js"></script>
+  </body>
+</html>

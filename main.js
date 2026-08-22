@@ -8,6 +8,9 @@ const screenshot = require('./src/screenshot');
 const ocr = require('./src/ocr');
 const gemini = require('./src/gemini');
 const sysinfo = require('./src/sysinfo');
+const codeAnalyzer = require('./src/codeAnalyzer');
+const codedex = require('./src/codedex');
+const { getSyntaxEntry, getLibraryEntry } = require('./src/codeCatalog');
 
 // --- レイアウト定数 ---
 const MASCOT_DISPLAY_W = 72; // マスコット画像の表示幅(SVGの縦横比 144:204 を維持して高さを決める)
@@ -34,6 +37,8 @@ let overlayWindow = null;
 let popupWindow = null;
 let setupWindow = null;
 let dictionaryWindow = null;
+let codeWindow = null;
+let codedexWindow = null;
 let tray = null;
 
 let settings = {};
@@ -452,6 +457,50 @@ function openDictionaryWindow() {
   });
 }
 
+function openCodeWindow() {
+  if (codeWindow && !codeWindow.isDestroyed()) {
+    codeWindow.focus();
+    return;
+  }
+  codeWindow = new BrowserWindow({
+    width: 760,
+    height: 680,
+    title: 'コード解説',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-code.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  codeWindow.loadFile(path.join(__dirname, 'renderer', 'code', 'index.html'));
+  codeWindow.on('closed', () => {
+    codeWindow = null;
+  });
+}
+
+function openCodedexWindow() {
+  if (codedexWindow && !codedexWindow.isDestroyed()) {
+    codedexWindow.focus();
+    return;
+  }
+  codedexWindow = new BrowserWindow({
+    width: 780,
+    height: 600,
+    title: 'コード図鑑',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-codedex.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  codedexWindow.loadFile(path.join(__dirname, 'renderer', 'codedex', 'index.html'));
+  codedexWindow.on('closed', () => {
+    codedexWindow = null;
+  });
+}
+
 function createSetupWindow(prefill) {
   if (setupWindow && !setupWindow.isDestroyed()) {
     setupWindow.focus();
@@ -511,6 +560,10 @@ function buildContextMenu() {
       })),
     },
     { label: '辞書を見る', click: () => openDictionaryWindow() },
+    { type: 'separator' },
+    { label: 'コードを解説する', click: () => openCodeWindow() },
+    { label: 'コード図鑑を見る', click: () => openCodedexWindow() },
+    { type: 'separator' },
     {
       label: 'システム情報',
       submenu: sysinfo.getSnapshotLines().map((label) => ({ label, enabled: false })),
@@ -613,3 +666,62 @@ ipcMain.on('setup:skip', () => {
 ipcMain.on('setup:open-link', (_event, uri) => {
   if (typeof uri === 'string' && /^https?:\/\//.test(uri)) shell.openExternal(uri);
 });
+
+ipcMain.handle('code:analyze', async (_event, { filename, content }) => {
+  if (typeof content !== 'string' || !content.trim()) {
+    return { ok: false, error: '空のファイルは解析できません。' };
+  }
+
+  const analysis = codeAnalyzer.analyzeCode(filename, content);
+  if (analysis.languageId === 'unknown') {
+    return { ok: false, error: '対応していないファイル形式です(JavaScript / TypeScript / Pythonに対応しています)。' };
+  }
+
+  codedex.recordEncounters(app, analysis);
+
+  const syntax = analysis.syntax
+    .map(({ key, count }) => {
+      const entry = getSyntaxEntry(key);
+      return entry ? { key, count, label: entry.label, icon: entry.icon, description: entry.description } : null;
+    })
+    .filter(Boolean);
+  const libraries = analysis.libraries
+    .map(({ key, count }) => {
+      const entry = getLibraryEntry(key);
+      return entry ? { key, count, label: entry.label, icon: entry.icon, description: entry.description } : null;
+    })
+    .filter(Boolean);
+  const unknownLibraries = analysis.unknownLibraries.map(({ name, count }) => ({
+    key: `unknown:${name}`,
+    count,
+    label: name,
+    icon: '❓',
+    description: '図鑑にはまだ登録されていないライブラリ/パッケージです。',
+  }));
+
+  const persona = getPersona(currentCharacter);
+  const explanation = await gemini.explainCode({
+    languageLabel: analysis.languageLabel,
+    libraryLabels: libraries.map((l) => l.label),
+    namedItems: analysis.namedItems,
+    codeExcerpt: analysis.codeExcerpt,
+    truncated: analysis.truncated,
+    apiKey: settings.apiKey,
+    model: settings.model,
+    tone: persona.tone,
+  });
+
+  return {
+    ok: true,
+    language: { id: analysis.languageId, label: analysis.languageLabel },
+    truncated: analysis.truncated,
+    codeExcerpt: analysis.codeExcerpt,
+    namedItems: analysis.namedItems,
+    syntax,
+    libraries,
+    unknownLibraries,
+    explanation,
+  };
+});
+
+ipcMain.handle('codedex:list', () => codedex.getDexEntries(app));
