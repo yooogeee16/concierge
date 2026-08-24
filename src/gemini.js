@@ -9,11 +9,26 @@ function buildPrompt(term, contextLine, tone) {
 - 確実に分かっている事実のみを述べ、推測や不確かな情報は書かない。
 - 語句の意味が複数考えられる場合は、周辺の文脈から最も妥当な1つを選んで説明する。
 - 対象語句が固有名詞・専門用語・略語などで確信が持てない場合は、断定を避けるか「情報が不十分で断定できません」と正直に答える。
-- 説明文以外の前置き・後書き(「はい、説明します」等)は書かない。本文のみを出力する。
+- 対象語句はOCR(文字認識)で読み取ったものなので、誤字や余計な記号(罫線・箇条書き記号などの写り込み)が混じっている場合がある。周辺の文脈から、実際に指しているであろう正しい語句を判断すること。
 - 話し方(口調)は次の指定に従う。ただし、この指定は言い回しのみに適用し、事実の正確さより優先しない: ${tone}
+- 出力は必ず次の2行構成にする。
+  1行目は「対象語句: 」に続けて、誤字や余計な記号を補正した正式な語句だけを書く。
+  2行目は説明の本文だけをそのまま書く(「説明:」「説明本文:」のようなラベルや見出しは付けない。前置き・後書きも書かない)。
 
 対象語句: 「${term}」
 周辺の文脈(OCRで読み取ったため誤字を含む場合があります): 「${contextLine}」`;
+}
+
+// 1行目「対象語句: ...」からOCRの誤字を補正した語句を取り出し、2行目以降を説明本文とする。
+// 想定した形式でなければ、生成テキスト全体を説明文として扱い、語句は元のOCR結果のままにする。
+function splitTermAndText(rawText, fallbackTerm) {
+  const lines = rawText.split(/\r?\n/);
+  const m = (lines[0] || '').match(/^対象語句[:：]\s*(.+?)\s*$/);
+  if (m && m[1]) {
+    const rest = lines.slice(1).join('\n').trim();
+    if (rest) return { term: m[1], text: rest };
+  }
+  return { term: fallbackTerm, text: rawText };
 }
 
 // 1回分のAPI呼び出し。useGroundingがtrueならGoogle検索グラウンディングを有効にする
@@ -48,18 +63,20 @@ async function callGemini({ apiKey, model, term, contextLine, tone, useGrounding
   return res.json();
 }
 
-function parseResult(json) {
+function parseResult(json, fallbackTerm) {
   const candidate = json.candidates && json.candidates[0];
   const parts = (candidate && candidate.content && candidate.content.parts) || [];
-  const text = parts.map((p) => p.text || '').join('').trim();
+  const rawText = parts.map((p) => p.text || '').join('').trim();
 
-  if (!text) {
+  if (!rawText) {
     const reason = candidate && candidate.finishReason;
     return {
       ok: false,
       error: reason ? `説明を生成できませんでした(${reason})` : '説明を生成できませんでした。',
     };
   }
+
+  const { term, text } = splitTermAndText(rawText, fallbackTerm);
 
   const chunks = (candidate.groundingMetadata && candidate.groundingMetadata.groundingChunks) || [];
   const sources = [];
@@ -74,7 +91,7 @@ function parseResult(json) {
     if (sources.length >= 3) break;
   }
 
-  return { ok: true, text, sources };
+  return { ok: true, term, text, sources };
 }
 
 async function explainTerm({ term, contextLine, apiKey, model, tone }) {
@@ -86,7 +103,7 @@ async function explainTerm({ term, contextLine, apiKey, model, tone }) {
 
   try {
     const json = await callGemini({ apiKey, model: useModel, term, contextLine, tone: useTone, useGrounding: true });
-    return parseResult(json);
+    return parseResult(json, term);
   } catch (err) {
     // グラウンディング(Google検索)は無料枠キーだと429で使えないことがあるため、
     // その場合だけ通常の生成にフォールバックする(参照元はWikipediaリンクのみになる)。
@@ -97,7 +114,7 @@ async function explainTerm({ term, contextLine, apiKey, model, tone }) {
 
   try {
     const json = await callGemini({ apiKey, model: useModel, term, contextLine, tone: useTone, useGrounding: false });
-    return parseResult(json);
+    return parseResult(json, term);
   } catch (err) {
     return { ok: false, error: err.message };
   }

@@ -413,8 +413,10 @@ async function handleLookupSelect(localRect) {
     if (!result.ok) {
       updatePopup({ status: 'error', term: rec.term, error: result.error, persona });
     } else {
-      lastResult = { term: rec.term, text: result.text, sources: result.sources };
-      updatePopup({ status: 'done', term: rec.term, text: result.text, sources: result.sources, persona });
+      // 表示・辞書登録には、OCRの生の検出結果ではなく、AIが誤字等を補正した語句を使う
+      const displayTerm = result.term || rec.term;
+      lastResult = { term: displayTerm, text: result.text, sources: result.sources };
+      updatePopup({ status: 'done', term: displayTerm, text: result.text, sources: result.sources, persona });
     }
   } catch (err) {
     updatePopup({ status: 'error', error: err.message || String(err), persona });
