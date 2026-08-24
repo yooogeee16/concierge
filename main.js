@@ -353,20 +353,11 @@ function toggleLookupMode() {
 
 const DRAG_THRESHOLD_PX = 6; // これ未満の移動は「クリック」として扱う(単語スナップ検出)
 
-// overlayのローカル座標(x0,y0,x1,y1)を、ディスプレイ間の位置ずれを考慮したスクリーン座標に変換する
-function localRectToScreen(localRect) {
+// overlayのローカル座標を、ディスプレイ間の位置ずれを考慮したスクリーン座標に変換する
+function localPointToScreen(x, y) {
   const ox = overlayBounds ? overlayBounds.x : 0;
   const oy = overlayBounds ? overlayBounds.y : 0;
-  const x0 = localRect.x0 + ox;
-  const y0 = localRect.y0 + oy;
-  const x1 = localRect.x1 + ox;
-  const y1 = localRect.y1 + oy;
-  return {
-    x: Math.min(x0, x1),
-    y: Math.min(y0, y1),
-    width: Math.abs(x1 - x0),
-    height: Math.abs(y1 - y0),
-  };
+  return { x: x + ox, y: y + oy };
 }
 
 async function handleLookupSelect(localRect) {
@@ -374,9 +365,12 @@ async function handleLookupSelect(localRect) {
   busy = true;
   lastResult = null;
 
-  const rect = localRectToScreen(localRect);
-  const isDrag = rect.width > DRAG_THRESHOLD_PX || rect.height > DRAG_THRESHOLD_PX;
-  const anchorPoint = { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
+  const p0 = localPointToScreen(localRect.x0, localRect.y0);
+  const p1 = localPointToScreen(localRect.x1, localRect.y1);
+  const width = Math.abs(p1.x - p0.x);
+  const height = Math.abs(p1.y - p0.y);
+  const isDrag = width > DRAG_THRESHOLD_PX || height > DRAG_THRESHOLD_PX;
+  const anchorPoint = { x: Math.round((p0.x + p1.x) / 2), y: Math.round((p0.y + p1.y) / 2) };
 
   const persona = getPersona(currentCharacter);
   sendMascotState({ mode: 'lookup', thinking: true });
@@ -385,13 +379,14 @@ async function handleLookupSelect(localRect) {
   try {
     let rec;
     if (isDrag) {
-      // マーカーでドラッグした範囲をそのままOCRする(単語区切りの誤検出を避けられる)
-      const shot = await screenshot.captureRegion(rect);
+      // マーカーでドラッグした始点〜終点を、テキストの流れとしてOCRする
+      // (行をまたぐ選択でも正しく拾えるよう、単純な矩形との重なり判定は使わない)
+      const shot = await screenshot.captureRegion(p0, p1);
       if (!shot) {
         updatePopup({ status: 'error', error: '画面のキャプチャに失敗しました。', persona });
         return;
       }
-      rec = await ocr.recognizeRegion(shot.buffer, shot.selection);
+      rec = await ocr.recognizeFlowRegion(shot.buffer, shot.dragStart, shot.dragEnd);
     } else {
       // 単純なクリックの場合は、これまで通りクリック位置に最も近い単語を拾う
       const shot = await screenshot.captureAroundPoint(anchorPoint);

@@ -42,18 +42,6 @@ async function recognizeNear(buffer, cx, cy) {
   };
 }
 
-// 単語のバウンディングボックスのうち、どれだけの割合が指定範囲(sel)と重なっているか
-function overlapFraction(bbox, sel) {
-  const ox0 = Math.max(bbox.x0, sel.x);
-  const oy0 = Math.max(bbox.y0, sel.y);
-  const ox1 = Math.min(bbox.x1, sel.x + sel.width);
-  const oy1 = Math.min(bbox.y1, sel.y + sel.height);
-  const overlapW = Math.max(0, ox1 - ox0);
-  const overlapH = Math.max(0, oy1 - oy0);
-  const bboxArea = Math.max(1, (bbox.x1 - bbox.x0) * (bbox.y1 - bbox.y0));
-  return (overlapW * overlapH) / bboxArea;
-}
-
 // 読み順(行→行内の左から右)に並べつつ、英数字混じりの場合だけ単語間に空白を入れる
 function joinWordsInReadingOrder(words) {
   const sorted = [...words].sort((a, b) => {
@@ -75,18 +63,65 @@ function joinWordsInReadingOrder(words) {
   return out.trim();
 }
 
-const OVERLAP_THRESHOLD = 0.5; // 単語のバウンディングボックスの半分以上が範囲内にあれば採用する
+const LINE_X_SLACK = 4; // 行の始点/終点付近の単語を拾いこぼさないための許容誤差(ピクセル)
 
-// ユーザーがマーカーでドラッグ指定した範囲を丸ごとOCRし、その中で単語境界の
-// 誤検出(例:「サーバーコンソリデーション」の一部の「ン」だけを拾う)を避けつつ、
-// 指定範囲の外側にはみ出しただけの単語(例:隣接する別のテキストが余白に写り込んだもの)は除外する。
-async function recognizeRegion(buffer, selection) {
+// yがどの行に最も近い(または含まれる)かを返す
+function findLineIndex(lines, y) {
+  let best = 0;
+  let bestDist = Infinity;
+  lines.forEach((line, i) => {
+    const inside = y >= line.bbox.y0 && y <= line.bbox.y1;
+    const dist = inside ? 0 : Math.min(Math.abs(y - line.bbox.y0), Math.abs(y - line.bbox.y1));
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  });
+  return best;
+}
+
+// ユーザーがマーカーでドラッグ指定した始点/終点をもとに、テキストエディタの範囲選択と
+// 同じ感覚で単語を拾う。単一行内なら始点〜終点のx範囲、複数行にまたがる場合は
+// 開始行は始点から行末まで・終了行は行頭から終点まで・その間の行は全体を選択する
+// (単純な矩形との重なりだけで判定すると、行またぎの選択語句を正しく拾えないため)。
+async function recognizeFlowRegion(buffer, dragStart, dragEnd) {
   const worker = await getWorker();
   const { data } = await worker.recognize(buffer);
-  const words = (data.words || []).filter((w) => w.text && w.text.trim());
-  if (words.length === 0) return null;
 
-  const kept = selection ? words.filter((w) => overlapFraction(w.bbox, selection) >= OVERLAP_THRESHOLD) : words;
+  const lines = (data.lines || [])
+    .map((line) => ({ bbox: line.bbox, words: (line.words || []).filter((w) => w.text && w.text.trim()) }))
+    .filter((line) => line.words.length > 0)
+    .sort((a, b) => a.bbox.y0 - b.bbox.y0);
+  if (lines.length === 0) return null;
+
+  const [topPoint, bottomPoint] = dragStart.y <= dragEnd.y ? [dragStart, dragEnd] : [dragEnd, dragStart];
+  const startIdx = findLineIndex(lines, topPoint.y);
+  const endIdx = Math.max(startIdx, findLineIndex(lines, bottomPoint.y));
+
+  const kept = [];
+  for (let i = startIdx; i <= endIdx; i++) {
+    const sorted = [...lines[i].words].sort((a, b) => a.bbox.x0 - b.bbox.x0);
+    if (startIdx === endIdx) {
+      const xMin = Math.min(topPoint.x, bottomPoint.x) - LINE_X_SLACK;
+      const xMax = Math.max(topPoint.x, bottomPoint.x) + LINE_X_SLACK;
+      for (const w of sorted) {
+        const center = (w.bbox.x0 + w.bbox.x1) / 2;
+        if (center >= xMin && center <= xMax) kept.push(w);
+      }
+    } else if (i === startIdx) {
+      for (const w of sorted) {
+        const center = (w.bbox.x0 + w.bbox.x1) / 2;
+        if (center >= topPoint.x - LINE_X_SLACK) kept.push(w);
+      }
+    } else if (i === endIdx) {
+      for (const w of sorted) {
+        const center = (w.bbox.x0 + w.bbox.x1) / 2;
+        if (center <= bottomPoint.x + LINE_X_SLACK) kept.push(w);
+      }
+    } else {
+      kept.push(...sorted);
+    }
+  }
   if (kept.length === 0) return null;
 
   const text = joinWordsInReadingOrder(kept);
@@ -104,4 +139,4 @@ async function terminate() {
   }
 }
 
-module.exports = { recognizeNear, recognizeRegion, terminate };
+module.exports = { recognizeNear, recognizeFlowRegion, terminate };
