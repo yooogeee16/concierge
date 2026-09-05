@@ -1,0 +1,80 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.hidden {
+  display: none !important;
+}
+
+html,
+body {
+  background: transparent;
+  font: 13px/1.6 -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif;
+  color: #1f2430;
+}
+
+#card {
+  position: relative;
+  background: rgba(255, 253, 247, 0.97);
+  border: 1px solid rgba(30, 58, 95, 0.25);
+  border-left: 4px solid var(--accent, #1e3a5f);
+  border-radius: 10px;
+  padding: 14px 16px 12px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+}
+
+#close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: #8a8f9c;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+#close:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #1f2430;
+}
+
+#question {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent, #1e3a5f);
+  padding-right: 20px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+#text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#sources {
+  margin-top: 8px;
+  padding-left: 16px;
+}
+
+#sources.hidden {
+  display: none;
+}
+
+#sources a {
+  font-size: 11px;
+  color: var(--accent, #1e3a5f);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+#sources a:hover {
+  text-decoration: underline;
+}

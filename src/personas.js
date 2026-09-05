@@ -8,6 +8,7 @@ const PERSONAS = {
     loadingBlind: '文字を読み取っております…',
     disclaimer: 'AIによる説明のため、誤りを含む場合がございます。',
     empty: '文字を認識できませんでした。もう少し文字に近づけてクリックしてくださいませ。',
+    quizQuestion: '「{term}」、覚えていらっしゃいますか?',
   },
   pink: {
     key: 'pink',
@@ -18,6 +19,7 @@ const PERSONAS = {
     loadingBlind: '文字を読み取り中だよ…',
     disclaimer: 'AIの説明だから、間違ってることもあるよ。',
     empty: '文字が読み取れなかったよ。もう少し近づけてクリックしてみて。',
+    quizQuestion: '「{term}」って覚えてる?',
   },
   green: {
     key: 'green',
@@ -28,6 +30,7 @@ const PERSONAS = {
     loadingBlind: '文字を読み取っています…',
     disclaimer: 'AIによる説明のため、誤りを含む場合があります。',
     empty: '文字を認識できませんでした。もう少し文字に近づけてクリックしてください。',
+    quizQuestion: '「{term}」について、覚えていますか。',
   },
   red: {
     key: 'red',
@@ -38,6 +41,7 @@ const PERSONAS = {
     loadingBlind: '文字を読み取り中だぜ…',
     disclaimer: 'AIの説明だから、たまに間違えることもあるぜ。',
     empty: '文字が読み取れなかったぜ。もう少し近づけてクリックしてくれ。',
+    quizQuestion: '「{term}」って覚えてるか?!',
   },
 };
 

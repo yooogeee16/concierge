@@ -31,10 +31,13 @@ const POPUP_OFFSET = 18;
 
 // --- ふわふわ浮遊(自律移動)関連定数。「少しだけ」動く程度に留める ---
 const DRIFT_TICK_MS = 60;
-const DRIFT_SPEED_PX_PER_SEC = 16;
-const IDLE_DURATION_MS = [4000, 9000];
-const DRIFT_DURATION_MS = [1000, 2200];
+const DRIFT_SPEED_PX_PER_SEC = 8;
+const IDLE_DURATION_MS = [8000, 20000];
+const DRIFT_DURATION_MS = [600, 1200];
 const DRAG_END_DEBOUNCE_MS = 220;
+
+// --- 辞書の復習クイズ関連定数。「たまに」聞きに来る程度の頻度に留める ---
+const QUIZ_INTERVAL_MS = [20 * 60 * 1000, 45 * 60 * 1000]; // 20〜45分に1回、ランダムな間隔で
 
 let mascotWindow = null;
 let overlayWindow = null;
@@ -44,6 +47,8 @@ let dictionaryWindow = null;
 let codeWindow = null;
 let codedexWindow = null;
 let detailWindow = null;
+let quizWindow = null;
+let quizTimer = null;
 let tray = null;
 
 let settings = {};
@@ -681,11 +686,86 @@ function buildContextMenu() {
   ]);
 }
 
+const QUIZ_WIDTH = 300;
+const QUIZ_MIN_HEIGHT = 130;
+const QUIZ_MAX_HEIGHT = 380;
+
+function scheduleNextQuiz() {
+  if (quizTimer) clearTimeout(quizTimer);
+  quizTimer = setTimeout(maybeShowQuiz, randRange(QUIZ_INTERVAL_MS));
+}
+
+// 辞書に登録した語句を、たまにマスコットが思い出したように聞きに来る
+function maybeShowQuiz() {
+  scheduleNextQuiz();
+  if (activeMode !== null) return; // 調べる/詳しく解説モード中は聞きに来ない
+  if (quizWindow && !quizWindow.isDestroyed()) return; // 既に聞いている最中
+  const entries = dictionary.loadDictionary(app);
+  if (!entries || entries.length === 0) return;
+  const entry = entries[Math.floor(Math.random() * entries.length)];
+  openQuizWindow(entry);
+}
+
+function positionQuizWindow(width, height) {
+  const display = screen.getDisplayNearestPoint({ x: wander.x + MASCOT_W / 2, y: wander.y + MASCOT_H / 2 });
+  const work = display.workArea;
+  let x = wander.x + MASCOT_W / 2 - width / 2;
+  let y = wander.y - height - 12;
+  if (y < work.y) y = wander.y + MASCOT_H + 12; // 上にはみ出す場合はマスコットの下に出す
+  x = Math.max(work.x, Math.min(work.x + work.width - width, x));
+  y = Math.max(work.y, Math.min(work.y + work.height - height, y));
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+function openQuizWindow(entry) {
+  const persona = getPersona(currentCharacter);
+  const { x, y } = positionQuizWindow(QUIZ_WIDTH, QUIZ_MIN_HEIGHT);
+
+  quizWindow = new BrowserWindow({
+    width: QUIZ_WIDTH,
+    height: QUIZ_MIN_HEIGHT,
+    x,
+    y,
+    show: false,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: false,
+    movable: false,
+    skipTaskbar: true,
+    hasShadow: true,
+    focusable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-quiz.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  quizWindow.setAlwaysOnTop(true, 'screen-saver');
+  quizWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  quizWindow.loadFile(path.join(__dirname, 'renderer', 'quiz', 'index.html'));
+  quizWindow.webContents.once('did-finish-load', () => {
+    if (quizWindow) quizWindow.webContents.send('quiz:show', { entry, persona });
+  });
+  quizWindow.once('ready-to-show', () => {
+    if (quizWindow) quizWindow.showInactive();
+  });
+  quizWindow.on('closed', () => {
+    quizWindow = null;
+  });
+}
+
+function closeQuizWindow() {
+  if (quizWindow && !quizWindow.isDestroyed()) quizWindow.close();
+  quizWindow = null;
+}
+
 function startMainApp() {
   if (mascotWindow) return;
   createMascotWindow();
   createPopupWindow();
   startWanderTimer();
+  scheduleNextQuiz();
 }
 
 app.whenReady().then(() => {
@@ -715,6 +795,7 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   stopWanderTimer();
   sysinfo.stop();
+  if (quizTimer) clearTimeout(quizTimer);
 });
 
 app.on('before-quit', () => {
@@ -754,6 +835,19 @@ ipcMain.handle('popup:save-dictionary', () => {
   const record = dictionary.saveEntry(app, lastResult);
   return { ok: true, record };
 });
+
+ipcMain.on('quiz:content-size', (_event, size) => {
+  if (!quizWindow || quizWindow.isDestroyed()) return;
+  const height = Math.max(QUIZ_MIN_HEIGHT, Math.min(QUIZ_MAX_HEIGHT, Math.ceil(size.height)));
+  const { x, y } = positionQuizWindow(QUIZ_WIDTH, height);
+  quizWindow.setBounds({ x, y, width: QUIZ_WIDTH, height });
+});
+
+ipcMain.on('quiz:open-link', (_event, uri) => {
+  if (typeof uri === 'string' && /^https?:\/\//.test(uri)) shell.openExternal(uri);
+});
+
+ipcMain.on('quiz:close', () => closeQuizWindow());
 
 ipcMain.handle('dictionary:list', () => dictionary.loadDictionary(app));
 ipcMain.handle('dictionary:delete', (_event, term) => dictionary.deleteEntry(app, term));
