@@ -8,5 +8,5 @@ contextBridge.exposeInMainWorld('popupAPI', {
   openLink: (uri) => ipcRenderer.send('popup:open-link', uri),
   close: () => ipcRenderer.send('popup:close'),
   retry: () => ipcRenderer.send('popup:retry'),
-  saveToDictionary: () => ipcRenderer.invoke('popup:save-dictionary'),
+  removeFromDictionary: () => ipcRenderer.invoke('popup:remove-dictionary'),
 });

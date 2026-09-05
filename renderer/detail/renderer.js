@@ -2,6 +2,43 @@ const statusEl = document.getElementById('status');
 const statusTextEl = document.getElementById('statusText');
 const noteEl = document.getElementById('note');
 const disclaimerEl = document.getElementById('disclaimer');
+const termsEl = document.getElementById('terms');
+const termsListEl = document.getElementById('termsList');
+
+function renderTerms(terms) {
+  termsListEl.innerHTML = '';
+  if (!terms || terms.length === 0) {
+    termsEl.classList.add('hidden');
+    return;
+  }
+  for (const t of terms) {
+    const li = document.createElement('li');
+
+    const info = document.createElement('div');
+    info.className = 'term-info';
+    const name = document.createElement('div');
+    name.className = 'term-name';
+    name.textContent = t.term;
+    const text = document.createElement('div');
+    text.className = 'term-text';
+    text.textContent = t.text;
+    info.appendChild(name);
+    info.appendChild(text);
+
+    const btn = document.createElement('button');
+    btn.textContent = '登録を取り消す';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const result = await window.detailAPI.removeFromDictionary(t.term);
+      btn.textContent = result && result.ok ? '取り消し済み' : '取り消せませんでした';
+    });
+
+    li.appendChild(info);
+    li.appendChild(btn);
+    termsListEl.appendChild(li);
+  }
+  termsEl.classList.remove('hidden');
+}
 
 function escapeHtml(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -84,12 +121,14 @@ function render(data) {
       statusEl.classList.remove('hidden');
       noteEl.classList.add('hidden');
       disclaimerEl.classList.add('hidden');
+      renderTerms(null);
       statusTextEl.textContent = '文字を認識できませんでした。もう少し広めにドラッグしてみてください。';
       break;
     case 'error':
       statusEl.classList.remove('hidden');
       noteEl.classList.add('hidden');
       disclaimerEl.classList.add('hidden');
+      renderTerms(null);
       statusTextEl.textContent = data.error || 'エラーが発生しました。';
       statusTextEl.classList.add('error-text');
       break;
@@ -98,6 +137,7 @@ function render(data) {
       noteEl.classList.remove('hidden');
       disclaimerEl.classList.remove('hidden');
       noteEl.innerHTML = markdownToHtml(data.markdown || '');
+      renderTerms(data.terms);
       break;
     default:
       break;

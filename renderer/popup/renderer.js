@@ -56,7 +56,6 @@ function render(data) {
   textEl.classList.remove('error-text');
 
   saveEl.disabled = false;
-  saveEl.textContent = '辞書に登録';
 
   switch (data.status) {
     case 'loading':
@@ -90,6 +89,7 @@ function render(data) {
       renderSources(data.term, data.sources);
       actionsEl.classList.remove('hidden');
       saveEl.classList.remove('hidden');
+      saveEl.textContent = '辞書に登録済み(取り消す)';
       retryEl.classList.remove('hidden');
       break;
     default:
@@ -114,6 +114,6 @@ retryEl.addEventListener('click', () => {
 
 saveEl.addEventListener('click', async () => {
   saveEl.disabled = true;
-  const result = await window.popupAPI.saveToDictionary();
-  saveEl.textContent = result && result.ok ? '登録しました' : '登録できませんでした';
+  const result = await window.popupAPI.removeFromDictionary();
+  saveEl.textContent = result && result.ok ? '辞書登録を取り消しました' : '取り消せませんでした';
 });

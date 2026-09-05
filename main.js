@@ -37,7 +37,7 @@ const DRIFT_DURATION_MS = [600, 1200];
 const DRAG_END_DEBOUNCE_MS = 220;
 
 // --- 辞書の復習クイズ関連定数。「たまに」聞きに来る程度の頻度に留める ---
-const QUIZ_INTERVAL_MS = [20 * 60 * 1000, 45 * 60 * 1000]; // 20〜45分に1回、ランダムな間隔で
+const QUIZ_INTERVAL_MS = [60 * 1000, 60 * 1000]; // 1分に1回
 
 let mascotWindow = null;
 let overlayWindow = null;
@@ -434,6 +434,7 @@ async function handleLookupSelect(localRect) {
       // 表示・辞書登録には、OCRの生の検出結果ではなく、AIが誤字等を補正した語句を使う
       const displayTerm = result.term || rec.term;
       lastResult = { term: displayTerm, text: result.text, sources: result.sources };
+      dictionary.saveEntry(app, lastResult); // 辞書には既定で登録し、不要なら吹き出しの取り消しボタンで消す
       updatePopup({ status: 'done', term: displayTerm, text: result.text, sources: result.sources, persona });
     }
   } catch (err) {
@@ -491,7 +492,11 @@ async function handleDetailSelect(localRect) {
     if (!result.ok) {
       updateDetail({ status: 'error', error: result.error, persona });
     } else {
-      updateDetail({ status: 'done', markdown: result.markdown, persona });
+      // 抽出した語句は既定で辞書に登録し、不要なものだけウィンドウ側で個別に取り消せるようにする
+      for (const t of result.terms || []) {
+        dictionary.saveEntry(app, { term: t.term, text: t.text, sources: [] });
+      }
+      updateDetail({ status: 'done', markdown: result.markdown, terms: result.terms || [], persona });
     }
   } catch (err) {
     updateDetail({ status: 'error', error: err.message || String(err), persona });
@@ -830,10 +835,10 @@ ipcMain.on('popup:retry', () => {
   enterMode('lookup');
 });
 
-ipcMain.handle('popup:save-dictionary', () => {
+ipcMain.handle('popup:remove-dictionary', () => {
   if (!lastResult) return { ok: false };
-  const record = dictionary.saveEntry(app, lastResult);
-  return { ok: true, record };
+  dictionary.deleteEntry(app, lastResult.term);
+  return { ok: true };
 });
 
 ipcMain.on('quiz:content-size', (_event, size) => {
@@ -848,6 +853,12 @@ ipcMain.on('quiz:open-link', (_event, uri) => {
 });
 
 ipcMain.on('quiz:close', () => closeQuizWindow());
+
+ipcMain.handle('detail:remove-dictionary', (_event, term) => {
+  if (typeof term !== 'string' || !term) return { ok: false };
+  dictionary.deleteEntry(app, term);
+  return { ok: true };
+});
 
 ipcMain.handle('dictionary:list', () => dictionary.loadDictionary(app));
 ipcMain.handle('dictionary:delete', (_event, term) => dictionary.deleteEntry(app, term));

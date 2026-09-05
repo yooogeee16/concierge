@@ -214,10 +214,33 @@ function buildDetailPrompt({ text, tone }) {
 - 可能であれば、覚え方(語呂合わせや着眼点)や、イメージしやすい例え話を項目ごとに添える。
 - 話し方(口調)は次の指定に従う。ただし言い回しのみに適用し、事実の正確さより優先しない: ${tone}
 - 出力は必ずMarkdown形式にする。使ってよい要素は見出し(## と ###)・太字(**text**)・箇条書き(-)・番号付きリスト(1. 2. ...)・通常の段落だけ。表・画像・コードブロックは使わない。
-- 前置き(「はい、まとめます」等)や後書きは書かない。本文のみを出力する。
+- 前置き(「はい、まとめます」等)や後書きは書かない。本文はMarkdownノートのみを出力する。
+- 本文をすべて出力し終えたら、必ず最後に区切り行 "===TERMS===" だけを1行書き、その次の行に、本文で扱った重要な語句と40字程度の簡潔な説明をJSON配列で書く。形式は [{"term":"語句","text":"説明"}] のみ。重要な語句が無ければ空配列 [] とする。この部分にMarkdown記法は使わない。
 
 対象の文章(OCRで読み取ったため誤字を含む場合があります):
 「${text}」`;
+}
+
+function parseDetailedResponse(rawText) {
+  const marker = '===TERMS===';
+  const idx = rawText.lastIndexOf(marker);
+  if (idx === -1) return { markdown: rawText.trim(), terms: [] };
+
+  const markdown = rawText.slice(0, idx).trim();
+  const termsPart = rawText.slice(idx + marker.length).trim();
+  let terms = [];
+  try {
+    const parsed = JSON.parse(termsPart);
+    if (Array.isArray(parsed)) {
+      terms = parsed
+        .filter((t) => t && typeof t.term === 'string' && t.term.trim() && typeof t.text === 'string')
+        .map((t) => ({ term: t.term.trim(), text: t.text.trim() }))
+        .slice(0, 20);
+    }
+  } catch {
+    // JSONとして解釈できなければ語句抽出は諦め、ノート本文だけを活かす
+  }
+  return { markdown, terms };
 }
 
 async function explainDetailed({ text, tone, apiKey, model }) {
@@ -258,13 +281,14 @@ async function explainDetailed({ text, tone, apiKey, model }) {
 
   const candidate = json.candidates && json.candidates[0];
   const parts = (candidate && candidate.content && candidate.content.parts) || [];
-  const markdown = parts.map((p) => p.text || '').join('').trim();
-  if (!markdown) {
+  const rawText = parts.map((p) => p.text || '').join('').trim();
+  if (!rawText) {
     const reason = candidate && candidate.finishReason;
     return { ok: false, error: reason ? `解説を生成できませんでした(${reason})` : '解説を生成できませんでした。' };
   }
 
-  return { ok: true, markdown };
+  const { markdown, terms } = parseDetailedResponse(rawText);
+  return { ok: true, markdown, terms };
 }
 
 module.exports = { explainTerm, explainCode, explainDetailed, DEFAULT_MODEL };
