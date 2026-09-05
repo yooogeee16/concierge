@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld('quizAPI', {
   reportSize: (size) => ipcRenderer.send('quiz:content-size', size),
   openLink: (uri) => ipcRenderer.send('quiz:open-link', uri),
   close: () => ipcRenderer.send('quiz:close'),
+  respond: (term, response) => ipcRenderer.send('quiz:respond', { term, response }),
 });

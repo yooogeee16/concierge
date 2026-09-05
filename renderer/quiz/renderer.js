@@ -3,6 +3,10 @@ const textEl = document.getElementById('text');
 const sourcesEl = document.getElementById('sources');
 const cardEl = document.getElementById('card');
 const closeEl = document.getElementById('close');
+const rememberedEl = document.getElementById('remembered');
+const forgotEl = document.getElementById('forgot');
+
+let currentTerm = null;
 
 function wikipediaSearchUrl(term) {
   return `https://ja.wikipedia.org/w/index.php?search=${encodeURIComponent(term)}`;
@@ -34,6 +38,7 @@ function renderSources(term, sources) {
 }
 
 window.quizAPI.onShow(({ entry, persona }) => {
+  currentTerm = entry.term;
   if (persona && persona.accent) {
     cardEl.style.setProperty('--accent', persona.accent);
   }
@@ -50,5 +55,16 @@ window.quizAPI.onShow(({ entry, persona }) => {
 });
 
 closeEl.addEventListener('click', () => {
+  window.quizAPI.close();
+});
+
+// 回答を記録してからウィジェットを閉じる(「覚えてない」は次回以降出題されやすくなる)
+rememberedEl.addEventListener('click', () => {
+  if (currentTerm) window.quizAPI.respond(currentTerm, 'remembered');
+  window.quizAPI.close();
+});
+
+forgotEl.addEventListener('click', () => {
+  if (currentTerm) window.quizAPI.respond(currentTerm, 'forgot');
   window.quizAPI.close();
 });

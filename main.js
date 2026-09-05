@@ -700,35 +700,44 @@ function scheduleNextQuiz() {
   quizTimer = setTimeout(maybeShowQuiz, randRange(QUIZ_INTERVAL_MS));
 }
 
-// 辞書に登録した語句を、たまにマスコットが思い出したように聞きに来る
+// 辞書に登録した語句を、たまにマスコットが思い出したように聞きに来る。
+// まだ出題していない語句を優先する。
 function maybeShowQuiz() {
   scheduleNextQuiz();
   if (activeMode !== null) return; // 調べる/詳しく解説モード中は聞きに来ない
   if (quizWindow && !quizWindow.isDestroyed()) return; // 既に聞いている最中
   const entries = dictionary.loadDictionary(app);
   if (!entries || entries.length === 0) return;
-  const entry = entries[Math.floor(Math.random() * entries.length)];
+  const entry = dictionary.pickQuizEntry(entries);
+  dictionary.markQuizzed(app, entry.term);
   openQuizWindow(entry);
 }
 
+// width/height含め、必ずディスプレイの作業領域(タスクバー等を除いた範囲)に収まるよう
+// 厳密にクランプする。マスコットの上、入らなければ下に表示する。
 function positionQuizWindow(width, height) {
   const display = screen.getDisplayNearestPoint({ x: wander.x + MASCOT_W / 2, y: wander.y + MASCOT_H / 2 });
   const work = display.workArea;
-  let x = wander.x + MASCOT_W / 2 - width / 2;
-  let y = wander.y - height - 12;
+  const w = Math.min(width, work.width);
+  const h = Math.min(height, work.height);
+
+  let x = wander.x + MASCOT_W / 2 - w / 2;
+  let y = wander.y - h - 12;
   if (y < work.y) y = wander.y + MASCOT_H + 12; // 上にはみ出す場合はマスコットの下に出す
-  x = Math.max(work.x, Math.min(work.x + work.width - width, x));
-  y = Math.max(work.y, Math.min(work.y + work.height - height, y));
-  return { x: Math.round(x), y: Math.round(y) };
+
+  x = Math.max(work.x, Math.min(work.x + work.width - w, x));
+  y = Math.max(work.y, Math.min(work.y + work.height - h, y));
+
+  return { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) };
 }
 
 function openQuizWindow(entry) {
   const persona = getPersona(currentCharacter);
-  const { x, y } = positionQuizWindow(QUIZ_WIDTH, QUIZ_MIN_HEIGHT);
+  const { x, y, width, height } = positionQuizWindow(QUIZ_WIDTH, QUIZ_MIN_HEIGHT);
 
   quizWindow = new BrowserWindow({
-    width: QUIZ_WIDTH,
-    height: QUIZ_MIN_HEIGHT,
+    width,
+    height,
     x,
     y,
     show: false,
@@ -843,9 +852,9 @@ ipcMain.handle('popup:remove-dictionary', () => {
 
 ipcMain.on('quiz:content-size', (_event, size) => {
   if (!quizWindow || quizWindow.isDestroyed()) return;
-  const height = Math.max(QUIZ_MIN_HEIGHT, Math.min(QUIZ_MAX_HEIGHT, Math.ceil(size.height)));
-  const { x, y } = positionQuizWindow(QUIZ_WIDTH, height);
-  quizWindow.setBounds({ x, y, width: QUIZ_WIDTH, height });
+  const requested = Math.max(QUIZ_MIN_HEIGHT, Math.min(QUIZ_MAX_HEIGHT, Math.ceil(size.height)));
+  const { x, y, width, height } = positionQuizWindow(QUIZ_WIDTH, requested);
+  quizWindow.setBounds({ x, y, width, height });
 });
 
 ipcMain.on('quiz:open-link', (_event, uri) => {
@@ -853,6 +862,10 @@ ipcMain.on('quiz:open-link', (_event, uri) => {
 });
 
 ipcMain.on('quiz:close', () => closeQuizWindow());
+
+ipcMain.on('quiz:respond', (_event, { term, response }) => {
+  if (typeof term === 'string' && term) dictionary.markResponse(app, term, response);
+});
 
 ipcMain.handle('detail:remove-dictionary', (_event, term) => {
   if (typeof term !== 'string' || !term) return { ok: false };

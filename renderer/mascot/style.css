@@ -64,7 +64,8 @@ body {
   width: 72px;
   height: auto;
   cursor: pointer;
-  -webkit-app-region: no-drag; /* キャラ本体はクリックでモード切り替えできるようドラッグ対象から外す */
+  /* キャラ本体もドラッグ対象にする。OSのドラッグ判定は実際に動かした時だけ働くため、
+     動かさずに離せば従来通りクリック(モード切り替え)として扱われる。 */
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
   transition: transform 0.12s ease;
 }
