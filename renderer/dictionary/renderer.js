@@ -17,9 +17,25 @@ function render(list) {
   for (const entry of list) {
     const li = document.createElement('li');
 
-    const term = document.createElement('div');
-    term.className = 'term';
-    term.textContent = entry.term;
+    const row = document.createElement('div');
+    row.className = 'term-row';
+
+    const chevron = document.createElement('span');
+    chevron.className = 'chevron';
+    chevron.textContent = '▶';
+
+    const name = document.createElement('div');
+    name.className = 'term-name';
+    name.textContent = entry.term;
+
+    row.appendChild(chevron);
+    row.appendChild(name);
+
+    const detail = document.createElement('div');
+    detail.className = 'detail';
+
+    const inner = document.createElement('div');
+    inner.className = 'detail-inner';
 
     const text = document.createElement('div');
     text.className = 'text';
@@ -33,7 +49,10 @@ function render(list) {
       const a = document.createElement('a');
       a.textContent = '出典';
       a.title = s.title;
-      a.addEventListener('click', () => window.dictionaryAPI.openLink(s.uri));
+      a.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.dictionaryAPI.openLink(s.uri);
+      });
       links.appendChild(a);
     }
 
@@ -43,7 +62,8 @@ function render(list) {
     const del = document.createElement('button');
     del.className = 'delete';
     del.textContent = '削除';
-    del.addEventListener('click', async () => {
+    del.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const next = await window.dictionaryAPI.remove(entry.term);
       render(next);
     });
@@ -52,9 +72,16 @@ function render(list) {
     meta.appendChild(dateEl);
     meta.appendChild(del);
 
-    li.appendChild(term);
-    li.appendChild(text);
-    li.appendChild(meta);
+    inner.appendChild(text);
+    inner.appendChild(meta);
+    detail.appendChild(inner);
+
+    row.addEventListener('click', () => {
+      li.classList.toggle('open');
+    });
+
+    li.appendChild(row);
+    li.appendChild(detail);
     listEl.appendChild(li);
   }
 }
