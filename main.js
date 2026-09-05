@@ -382,28 +382,33 @@ async function handleLookupSelect(localRect) {
 
   const persona = getPersona(currentCharacter);
   sendMascotState({ mode: 'lookup', thinking: true });
-  showPopup(anchorPoint, { status: 'loading', persona });
 
   try {
+    // 「調べています」ポップアップを表示するより前にキャプチャを済ませる。
+    // 先にポップアップを出してしまうと、行またぎ選択のために左右へ大きく
+    // 広げたキャプチャ範囲にポップアップ自体が写り込んでしまうため。
     let rec;
+    let shot;
     if (isDrag) {
       // マーカーでドラッグした始点〜終点を、テキストの流れとしてOCRする
       // (行をまたぐ選択でも正しく拾えるよう、単純な矩形との重なり判定は使わない)
-      const shot = await screenshot.captureRegion(p0, p1);
+      shot = await screenshot.captureRegion(p0, p1);
       if (!shot) {
-        updatePopup({ status: 'error', error: '画面のキャプチャに失敗しました。', persona });
+        showPopup(anchorPoint, { status: 'error', error: '画面のキャプチャに失敗しました。', persona });
         return;
       }
       rec = await ocr.recognizeFlowRegion(shot.buffer, shot.dragStart, shot.dragEnd);
     } else {
       // 単純なクリックの場合は、これまで通りクリック位置に最も近い単語を拾う
-      const shot = await screenshot.captureAroundPoint(anchorPoint);
+      shot = await screenshot.captureAroundPoint(anchorPoint);
       if (!shot) {
-        updatePopup({ status: 'error', error: '画面のキャプチャに失敗しました。', persona });
+        showPopup(anchorPoint, { status: 'error', error: '画面のキャプチャに失敗しました。', persona });
         return;
       }
       rec = await ocr.recognizeNear(shot.buffer, shot.cx, shot.cy);
     }
+
+    showPopup(anchorPoint, { status: 'loading', persona });
 
     if (!rec) {
       updatePopup({ status: 'empty', persona });
@@ -454,16 +459,19 @@ async function handleDetailSelect(localRect) {
   }
 
   const persona = getPersona(currentCharacter);
-  openDetailWindow();
   sendMascotState({ mode: 'detail', thinking: true });
 
   try {
+    // 新しいウィンドウを開く前にキャプチャを済ませる(既定位置が選択範囲と
+    // 重なって写り込むのを避けるため)。
     const shot = await screenshot.captureRegion(p0, p1);
     if (!shot) {
+      openDetailWindow();
       updateDetail({ status: 'error', error: '画面のキャプチャに失敗しました。', persona });
       return;
     }
     const rec = await ocr.recognizeFlowRegion(shot.buffer, shot.dragStart, shot.dragEnd);
+    openDetailWindow();
     if (!rec || !rec.fullText) {
       updateDetail({ status: 'empty', persona });
       return;
