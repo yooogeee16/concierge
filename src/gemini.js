@@ -205,4 +205,66 @@ async function explainCode({ languageLabel, libraryLabels, namedItems, codeExcer
   }
 }
 
-module.exports = { explainTerm, explainCode, DEFAULT_MODEL };
+function buildDetailPrompt({ text, tone }) {
+  return `あなたは学習ノートを作るのが得意な、分かりやすい解説者です。
+以下の文章の内容を、初めて学ぶ人にも分かりやすいように、構造化した解説ノートとしてまとめてください。
+
+制約:
+- 文章から読み取れる事実のみを述べ、推測や不確かな情報は書かない。専門用語は噛み砕いて説明する。
+- 可能であれば、覚え方(語呂合わせや着眼点)や、イメージしやすい例え話を項目ごとに添える。
+- 話し方(口調)は次の指定に従う。ただし言い回しのみに適用し、事実の正確さより優先しない: ${tone}
+- 出力は必ずMarkdown形式にする。使ってよい要素は見出し(## と ###)・太字(**text**)・箇条書き(-)・番号付きリスト(1. 2. ...)・通常の段落だけ。表・画像・コードブロックは使わない。
+- 前置き(「はい、まとめます」等)や後書きは書かない。本文のみを出力する。
+
+対象の文章(OCRで読み取ったため誤字を含む場合があります):
+「${text}」`;
+}
+
+async function explainDetailed({ text, tone, apiKey, model }) {
+  if (!apiKey) {
+    return { ok: false, error: 'APIキーが設定されていません。マスコットを右クリックして設定してください。' };
+  }
+  const useModel = model || DEFAULT_MODEL;
+  const useTone = tone || '丁寧語で話してください。';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: buildDetailPrompt({ text, tone: useTone }) }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
+  };
+
+  let res;
+  try {
+    res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (err) {
+    return { ok: false, error: `通信に失敗しました: ${err.message}` };
+  }
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const j = await res.json();
+      detail = (j.error && j.error.message) || '';
+    } catch {
+      // ignore
+    }
+    return { ok: false, error: `APIエラー(${res.status}) ${detail}`.trim() };
+  }
+
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    return { ok: false, error: '応答の解析に失敗しました。' };
+  }
+
+  const candidate = json.candidates && json.candidates[0];
+  const parts = (candidate && candidate.content && candidate.content.parts) || [];
+  const markdown = parts.map((p) => p.text || '').join('').trim();
+  if (!markdown) {
+    const reason = candidate && candidate.finishReason;
+    return { ok: false, error: reason ? `解説を生成できませんでした(${reason})` : '解説を生成できませんでした。' };
+  }
+
+  return { ok: true, markdown };
+}
+
+module.exports = { explainTerm, explainCode, explainDetailed, DEFAULT_MODEL };

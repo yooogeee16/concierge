@@ -43,12 +43,13 @@ let setupWindow = null;
 let dictionaryWindow = null;
 let codeWindow = null;
 let codedexWindow = null;
+let detailWindow = null;
 let tray = null;
 
 let settings = {};
 let currentCharacter = 'navy';
 
-let lookupMode = false;
+let activeMode = null; // null(アイドル) | 'lookup'(調べるモード) | 'detail'(詳しく解説モード)
 let busy = false;
 let lastClickPoint = null;
 let lastResult = null; // 直近の調べた結果({term, text, sources})。辞書登録に使う
@@ -127,7 +128,7 @@ function createMascotWindow() {
     const matchesCommand =
       lastCommandedBounds && Math.abs(x - lastCommandedBounds.x) <= 1 && Math.abs(y - lastCommandedBounds.y) <= 1;
     if (!matchesCommand) {
-      if (lookupMode) exitLookupMode();
+      if (activeMode !== null) exitMode();
       wander.x = x;
       wander.y = y;
       wander.dragging = true;
@@ -159,7 +160,7 @@ function wanderTick() {
     return;
   }
 
-  if (lookupMode) return; // 調べるモード中はオーバーレイの上に留まらせる
+  if (activeMode !== null) return; // 調べるモード/詳しく解説モード中はオーバーレイの上に留まらせる
 
   const display = screen.getDisplayNearestPoint({
     x: Math.round(wander.x + MASCOT_W / 2),
@@ -325,19 +326,24 @@ function refreshTrayMenu() {
   tray.setContextMenu(buildContextMenu());
 }
 
-function enterLookupMode() {
-  lookupMode = true;
-  hidePopup(); // 前回調べた内容が残っていたら消す
-  createOverlayWindow();
-  if (mascotWindow) mascotWindow.moveTop();
-  sendMascotState({ mode: 'lookup', thinking: false });
-  globalShortcut.register('Escape', () => exitLookupMode());
+// mode: 'lookup' | 'detail'。既にどちらかのモードが有効な場合は、オーバーレイ等は
+// 維持したままモードの切り替えだけを行う(調べる→詳しく解説、のクリック遷移のため)。
+function enterMode(mode) {
+  const wasActive = activeMode !== null;
+  activeMode = mode;
+  if (!wasActive) {
+    hidePopup(); // 前回調べた内容が残っていたら消す
+    createOverlayWindow();
+    if (mascotWindow) mascotWindow.moveTop();
+    globalShortcut.register('Escape', () => exitMode());
+  }
+  sendMascotState({ mode, thinking: false });
   refreshTrayMenu();
 }
 
-// keepPopup: 結果の吹き出しは表示したまま調べるモードだけ終了する場合にtrue
-function exitLookupMode({ keepPopup = false } = {}) {
-  lookupMode = false;
+// keepPopup: 結果の吹き出しは表示したままモードだけ終了する場合にtrue
+function exitMode({ keepPopup = false } = {}) {
+  activeMode = null;
   busy = false;
   destroyOverlayWindow();
   if (!keepPopup) hidePopup();
@@ -346,9 +352,11 @@ function exitLookupMode({ keepPopup = false } = {}) {
   refreshTrayMenu();
 }
 
-function toggleLookupMode() {
-  if (lookupMode) exitLookupMode();
-  else enterLookupMode();
+// マスコットをクリックするたびに idle → 調べるモード → 詳しく解説モード → idle と巡回する
+function cycleMode() {
+  if (activeMode === null) enterMode('lookup');
+  else if (activeMode === 'lookup') enterMode('detail');
+  else exitMode();
 }
 
 const DRAG_THRESHOLD_PX = 6; // これ未満の移動は「クリック」として扱う(単語スナップ検出)
@@ -422,7 +430,60 @@ async function handleLookupSelect(localRect) {
     updatePopup({ status: 'error', error: err.message || String(err), persona });
   } finally {
     // 1回調べたら調べるモードは自動で終了する(結果の吹き出しは表示したまま)
-    exitLookupMode({ keepPopup: true });
+    exitMode({ keepPopup: true });
+  }
+}
+
+const DETAIL_MAX_CHARS = 4000; // 詳しく解説モードでGeminiに渡す文章量の上限
+
+// 詳しく解説モード: ドラッグで指定した範囲の文章をまとめて渡し、専用ウィンドウに
+// 見出し・箇条書きつきの解説ノート(Markdown)を表示する。単純なクリックには反応しない。
+async function handleDetailSelect(localRect) {
+  if (busy) return;
+  busy = true;
+
+  const p0 = localPointToScreen(localRect.x0, localRect.y0);
+  const p1 = localPointToScreen(localRect.x1, localRect.y1);
+  const width = Math.abs(p1.x - p0.x);
+  const height = Math.abs(p1.y - p0.y);
+
+  if (width <= DRAG_THRESHOLD_PX && height <= DRAG_THRESHOLD_PX) {
+    // ドラッグで範囲を選ぶ専用のモードなので、ただのクリックは無視する
+    busy = false;
+    return;
+  }
+
+  const persona = getPersona(currentCharacter);
+  openDetailWindow();
+  sendMascotState({ mode: 'detail', thinking: true });
+
+  try {
+    const shot = await screenshot.captureRegion(p0, p1);
+    if (!shot) {
+      updateDetail({ status: 'error', error: '画面のキャプチャに失敗しました。', persona });
+      return;
+    }
+    const rec = await ocr.recognizeFlowRegion(shot.buffer, shot.dragStart, shot.dragEnd);
+    if (!rec || !rec.fullText) {
+      updateDetail({ status: 'empty', persona });
+      return;
+    }
+
+    const result = await gemini.explainDetailed({
+      text: rec.fullText.slice(0, DETAIL_MAX_CHARS),
+      apiKey: settings.apiKey,
+      model: settings.model,
+      tone: persona.tone,
+    });
+    if (!result.ok) {
+      updateDetail({ status: 'error', error: result.error, persona });
+    } else {
+      updateDetail({ status: 'done', markdown: result.markdown, persona });
+    }
+  } catch (err) {
+    updateDetail({ status: 'error', error: err.message || String(err), persona });
+  } finally {
+    exitMode();
   }
 }
 
@@ -431,7 +492,7 @@ function setCharacter(key) {
   currentCharacter = key;
   settings.character = key;
   store.saveSettings(app, settings);
-  sendMascotState({ mode: lookupMode ? 'lookup' : 'idle', thinking: false });
+  sendMascotState({ mode: activeMode || 'idle', thinking: false });
   refreshTrayMenu();
   if (tray && !tray.isDestroyed()) tray.setImage(trayIconPath(currentCharacter));
 }
@@ -480,6 +541,34 @@ function openCodeWindow() {
   codeWindow.on('closed', () => {
     codeWindow = null;
   });
+}
+
+function openDetailWindow() {
+  if (detailWindow && !detailWindow.isDestroyed()) {
+    detailWindow.focus();
+    return;
+  }
+  detailWindow = new BrowserWindow({
+    width: 720,
+    height: 780,
+    title: '詳しく解説',
+    icon: APP_ICON_PATH,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-detail.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  detailWindow.loadFile(path.join(__dirname, 'renderer', 'detail', 'index.html'));
+  detailWindow.on('closed', () => {
+    detailWindow = null;
+  });
+}
+
+function updateDetail(data) {
+  if (!detailWindow || detailWindow.isDestroyed()) return;
+  detailWindow.webContents.send('detail:update', data);
 }
 
 function openCodedexWindow() {
@@ -544,7 +633,7 @@ function createTray() {
   tray = new Tray(trayIconPath(currentCharacter));
   tray.setToolTip('コンシェルジュ');
   tray.setContextMenu(buildContextMenu());
-  tray.on('click', () => toggleLookupMode());
+  tray.on('click', () => cycleMode());
 }
 
 function buildContextMenu() {
@@ -552,8 +641,13 @@ function buildContextMenu() {
     { label: 'コンシェルジュ', enabled: false },
     { type: 'separator' },
     {
-      label: lookupMode ? '調べるモードを終了' : '調べるモードを開始',
-      click: () => toggleLookupMode(),
+      label:
+        activeMode === null
+          ? '調べるモードを開始'
+          : activeMode === 'lookup'
+            ? '詳しく解説モードに切り替え'
+            : 'モードを終了',
+      click: () => cycleMode(),
     },
     {
       label: '見た目を変える',
@@ -619,11 +713,14 @@ app.on('before-quit', () => {
   ocr.terminate().catch(() => {});
 });
 
-ipcMain.on('mascot:toggle-lookup', () => toggleLookupMode());
+ipcMain.on('mascot:toggle-lookup', () => cycleMode());
 ipcMain.on('mascot:context-menu', () => buildContextMenu().popup({ window: mascotWindow }));
 
-ipcMain.on('lookup:select', (_event, rect) => handleLookupSelect(rect));
-ipcMain.on('lookup:cancel', () => exitLookupMode());
+ipcMain.on('lookup:select', (_event, rect) => {
+  if (activeMode === 'detail') handleDetailSelect(rect);
+  else handleLookupSelect(rect);
+});
+ipcMain.on('lookup:cancel', () => exitMode());
 
 ipcMain.on('popup:content-size', (_event, size) => {
   if (!popupWindow || popupWindow.isDestroyed() || !lastClickPoint) return;
@@ -641,7 +738,7 @@ ipcMain.on('popup:close', () => hidePopup());
 // 選んだ文字が間違っていた場合、もう一度クリックし直せるように調べるモードへ戻す
 ipcMain.on('popup:retry', () => {
   hidePopup();
-  enterLookupMode();
+  enterMode('lookup');
 });
 
 ipcMain.handle('popup:save-dictionary', () => {

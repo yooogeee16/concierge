@@ -128,7 +128,8 @@ async function recognizeFlowRegion(buffer, dragStart, dragEnd) {
   if (!text) return null;
 
   const term = text.slice(0, MAX_REGION_TERM_LENGTH);
-  return { term, contextLine: text.slice(0, 200) };
+  // fullTextは切り詰めていない全文(詳しく解説モードなど、長い文章が必要な用途向け)
+  return { term, contextLine: text.slice(0, 200), fullText: text };
 }
 
 async function terminate() {

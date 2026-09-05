@@ -4,18 +4,25 @@ const hintEl = document.getElementById('hint');
 
 let hintTimer = null;
 let currentCharacter = 'navy';
-let currentLookup = false;
 
-function spriteSrc(character, lookup) {
-  return `../assets/mascot-${character}-${lookup ? 'lookup' : 'idle'}.svg`;
+const HINT_TEXT = {
+  idle: 'クリックで調べるモード / まわりをドラッグで移動',
+  lookup: 'クリックでもう一度押すと詳しく解説モードへ',
+  detail: 'ドラッグした範囲を詳しく解説します',
+};
+
+function spriteSrc(character, mode) {
+  return `../assets/mascot-${character}-${mode === 'idle' ? 'idle' : 'lookup'}.svg`;
 }
 
 function applyState(state) {
   if (state.character) currentCharacter = state.character;
-  currentLookup = state.mode === 'lookup';
-  spriteEl.src = spriteSrc(currentCharacter, currentLookup);
-  stageEl.classList.toggle('lookup', currentLookup);
+  const mode = state.mode || 'idle';
+  spriteEl.src = spriteSrc(currentCharacter, mode);
+  stageEl.classList.toggle('lookup', mode === 'lookup');
+  stageEl.classList.toggle('detail', mode === 'detail');
   stageEl.classList.toggle('thinking', !!state.thinking);
+  hintEl.textContent = HINT_TEXT[mode] || HINT_TEXT.idle;
 }
 
 function applyWalk(state) {
