@@ -1,6 +1,6 @@
 {
   "name": "concierge",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "画面上の気になった文字にカーソルを合わせて調べる、透明デスクトップ常駐コンシェルジュアプリ",
   "main": "main.js",
   "author": "ytatthan0616-debug",
