@@ -2,7 +2,6 @@ const path = require('path');
 const { createWorker } = require('tesseract.js');
 const { app } = require('electron');
 
-const NEAR_THRESHOLD_PX = 90; // クリック位置からこれ以上離れた単語は無関係とみなす
 const MAX_REGION_TERM_LENGTH = 60; // ドラッグ範囲から拾う語句の上限文字数(暴走防止)
 
 let workerPromise = null;
@@ -14,32 +13,6 @@ function getWorker() {
     });
   }
   return workerPromise;
-}
-
-// バッファ内の(cx, cy)に最も近い単語と、その単語が属する行のテキストを返す
-async function recognizeNear(buffer, cx, cy) {
-  const worker = await getWorker();
-  const { data } = await worker.recognize(buffer);
-  const words = (data.words || []).filter((w) => w.text && w.text.trim());
-  if (words.length === 0) return null;
-
-  let best = null;
-  let bestDist = Infinity;
-  for (const w of words) {
-    const { x0, y0, x1, y1 } = w.bbox;
-    const inside = cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
-    const dist = inside ? 0 : Math.hypot((x0 + x1) / 2 - cx, (y0 + y1) / 2 - cy);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = w;
-    }
-  }
-  if (!best || bestDist > NEAR_THRESHOLD_PX) return null;
-
-  return {
-    term: best.text.trim(),
-    contextLine: ((best.line && best.line.text) || best.text).trim(),
-  };
 }
 
 // 読み順(行→行内の左から右)に並べつつ、英数字混じりの場合だけ単語間に空白を入れる
@@ -84,6 +57,8 @@ function findLineIndex(lines, y) {
 // 同じ感覚で単語を拾う。単一行内なら始点〜終点のx範囲、複数行にまたがる場合は
 // 開始行は始点から行末まで・終了行は行頭から終点まで・その間の行は全体を選択する
 // (単純な矩形との重なりだけで判定すると、行またぎの選択語句を正しく拾えないため)。
+// 単純なクリック(dragStart === dragEnd)の場合も、始点と終点が同じ「範囲調査」として
+// 扱われ、クリック位置のx座標に最も近い単語だけが同じロジックで拾われる。
 async function recognizeFlowRegion(buffer, dragStart, dragEnd) {
   const worker = await getWorker();
   const { data } = await worker.recognize(buffer);
@@ -140,4 +115,4 @@ async function terminate() {
   }
 }
 
-module.exports = { recognizeNear, recognizeFlowRegion, terminate };
+module.exports = { recognizeFlowRegion, terminate };

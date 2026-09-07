@@ -15,14 +15,45 @@ body {
   color: #1f2430;
 }
 
+#wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 #card {
   position: relative;
+  width: 100%;
   background: rgba(255, 253, 247, 0.97);
   border: 1px solid rgba(30, 58, 95, 0.25);
   border-left: 4px solid var(--accent, #1e3a5f);
   border-radius: 10px;
   padding: 14px 16px 12px;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+}
+
+/* マスコットに向かって伸びる吹き出しのしっぽ(既定はマスコットが下にいる想定) */
+#tail {
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 10px solid rgba(255, 253, 247, 0.97);
+  margin-top: -1px;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.12));
+}
+
+/* マスコットが上にいて吹き出しが下に出ている場合は、しっぽも上向きに反転する */
+#wrap.below {
+  flex-direction: column-reverse;
+}
+
+#wrap.below #tail {
+  border-top: none;
+  border-bottom: 10px solid rgba(255, 253, 247, 0.97);
+  margin-top: 0;
+  margin-bottom: -1px;
+  filter: drop-shadow(0 -3px 2px rgba(0, 0, 0, 0.12));
 }
 
 #close {

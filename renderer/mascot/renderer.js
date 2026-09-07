@@ -25,13 +25,7 @@ function applyState(state) {
   hintEl.textContent = HINT_TEXT[mode] || HINT_TEXT.idle;
 }
 
-function applyWalk(state) {
-  stageEl.classList.toggle('walking', !!state.walking);
-  stageEl.classList.toggle('facing-left', state.facing === 'left');
-}
-
 window.mascotAPI.onState(applyState);
-window.mascotAPI.onWalk(applyWalk);
 
 spriteEl.addEventListener('click', () => {
   window.mascotAPI.toggleLookup();

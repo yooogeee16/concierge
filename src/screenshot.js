@@ -1,7 +1,5 @@
 const { desktopCapturer, screen } = require('electron');
 
-const CROP_W = 480;
-const CROP_H = 140;
 const REGION_PADDING_Y = 10; // ドラッグ範囲の上下で文字が切れないための余白(物理ピクセル)
 const FLOW_PAD_X = 400; // 行またぎ選択(改行をまたぐ範囲選択)に備え、左右に大きめの余白を持たせる(物理ピクセル)
 
@@ -27,26 +25,6 @@ async function getDisplaySnapshot(point) {
   if (size.width === 0 || size.height === 0) return null;
 
   return { display, img, size };
-}
-
-async function captureAroundPoint(point) {
-  const snap = await getDisplaySnapshot(point);
-  if (!snap) return null;
-  const { display, img, size } = snap;
-
-  // サムネイルが要求サイズ通りに返らない場合(レターボックス等)に備え、比率で換算する
-  const localX = (point.x - display.bounds.x) * (size.width / display.size.width);
-  const localY = (point.y - display.bounds.y) * (size.height / display.size.height);
-
-  const cropW = Math.min(CROP_W, size.width);
-  const cropH = Math.min(CROP_H, size.height);
-  let x = Math.round(localX - cropW / 2);
-  let y = Math.round(localY - cropH / 2);
-  x = Math.max(0, Math.min(size.width - cropW, x));
-  y = Math.max(0, Math.min(size.height - cropH, y));
-
-  const cropped = img.crop({ x, y, width: cropW, height: cropH });
-  return { buffer: cropped.toPNG(), cx: localX - x, cy: localY - y };
 }
 
 // ユーザーがマーカーでドラッグ指定した始点/終点(スクリーン座標)から、文字が
@@ -90,4 +68,4 @@ async function captureRegion(p0, p1) {
   };
 }
 
-module.exports = { captureAroundPoint, captureRegion };
+module.exports = { captureRegion };

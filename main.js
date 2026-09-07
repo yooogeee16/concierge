@@ -29,13 +29,6 @@ const POPUP_MIN_HEIGHT = 70;
 const POPUP_MAX_HEIGHT = 420;
 const POPUP_OFFSET = 18;
 
-// --- ふわふわ浮遊(自律移動)関連定数。「少しだけ」動く程度に留める ---
-const DRIFT_TICK_MS = 60;
-const DRIFT_SPEED_PX_PER_SEC = 8;
-const IDLE_DURATION_MS = [8000, 20000];
-const DRIFT_DURATION_MS = [600, 1200];
-const DRAG_END_DEBOUNCE_MS = 220;
-
 // --- 辞書の復習クイズ関連定数。「たまに」聞きに来る程度の頻度に留める ---
 const QUIZ_INTERVAL_MS = [60 * 1000, 60 * 1000]; // 1分に1回
 
@@ -59,19 +52,9 @@ let busy = false;
 let lastClickPoint = null;
 let lastResult = null; // 直近の調べた結果({term, text, sources})。辞書登録に使う
 
-let lastCommandedBounds = null;
-let wanderIntervalId = null;
-const wander = {
-  x: 0,
-  y: 0,
-  direction: 1,
-  mode: 'idle', // 'idle' | 'drift'
-  modeUntil: 0,
-  dragging: false,
-  lastMoveEventAt: 0,
-  lastSentFacing: null,
-  lastSentWalking: null,
-};
+// マスコットは自分からは動き回らない(ぷかぷか浮くアニメーションはCSS側のみ)。
+// ここで持つのはドラッグでユーザーが移動させた現在位置(クイズの表示位置決めに使う)だけ。
+const wander = { x: 0, y: 0 };
 
 function randRange([min, max]) {
   return min + Math.random() * (max - min);
@@ -80,17 +63,6 @@ function randRange([min, max]) {
 function sendMascotState(partial) {
   if (!mascotWindow || mascotWindow.isDestroyed()) return;
   mascotWindow.webContents.send('mascot:state', { character: currentCharacter, ...partial });
-}
-
-function sendMascotWalk(data) {
-  if (!mascotWindow || mascotWindow.isDestroyed()) return;
-  mascotWindow.webContents.send('mascot:walk', data);
-}
-
-function moveMascotTo(x, y) {
-  if (!mascotWindow || mascotWindow.isDestroyed()) return;
-  lastCommandedBounds = { x: Math.round(x), y: Math.round(y) };
-  mascotWindow.setBounds({ x: lastCommandedBounds.x, y: lastCommandedBounds.y, width: MASCOT_W, height: MASCOT_H });
 }
 
 function createMascotWindow() {
@@ -126,19 +98,13 @@ function createMascotWindow() {
   wander.y = initialY;
 
   // ドラッグは-webkit-app-region:drag によるOSネイティブ移動に任せている。
-  // 自分でsetBoundsした直後の座標と一致しなければユーザーによるドラッグとみなす。
+  // マスコット自身は動かさないので、'move'イベントは常にユーザーによるドラッグ。
   mascotWindow.on('move', () => {
     if (!mascotWindow) return;
     const [x, y] = mascotWindow.getPosition();
-    const matchesCommand =
-      lastCommandedBounds && Math.abs(x - lastCommandedBounds.x) <= 1 && Math.abs(y - lastCommandedBounds.y) <= 1;
-    if (!matchesCommand) {
-      if (activeMode !== null) exitMode();
-      wander.x = x;
-      wander.y = y;
-      wander.dragging = true;
-      wander.lastMoveEventAt = Date.now();
-    }
+    if (activeMode !== null) exitMode();
+    wander.x = x;
+    wander.y = y;
   });
 
   mascotWindow.on('system-context-menu', (event) => {
@@ -150,73 +116,6 @@ function createMascotWindow() {
     mascotWindow = null;
     app.quit();
   });
-}
-
-function wanderTick() {
-  if (!mascotWindow || mascotWindow.isDestroyed()) return;
-  const now = Date.now();
-
-  if (wander.dragging) {
-    if (now - wander.lastMoveEventAt > DRAG_END_DEBOUNCE_MS) {
-      wander.dragging = false;
-      wander.mode = 'idle';
-      wander.modeUntil = now + randRange(IDLE_DURATION_MS);
-    }
-    return;
-  }
-
-  if (activeMode !== null) return; // 調べるモード/詳しく解説モード中はオーバーレイの上に留まらせる
-
-  const display = screen.getDisplayNearestPoint({
-    x: Math.round(wander.x + MASCOT_W / 2),
-    y: Math.round(wander.y + MASCOT_H / 2),
-  });
-  const work = display.workArea;
-  const minX = work.x;
-  const maxX = work.x + work.width - MASCOT_W;
-
-  if (now >= wander.modeUntil) {
-    if (wander.mode === 'drift') {
-      wander.mode = 'idle';
-      wander.modeUntil = now + randRange(IDLE_DURATION_MS);
-    } else {
-      wander.mode = 'drift';
-      if (Math.random() < 0.5) wander.direction *= -1;
-      wander.modeUntil = now + randRange(DRIFT_DURATION_MS);
-    }
-  }
-
-  let walking = false;
-  if (wander.mode === 'drift') {
-    walking = true;
-    const dx = ((DRIFT_SPEED_PX_PER_SEC * DRIFT_TICK_MS) / 1000) * wander.direction;
-    wander.x += dx;
-    if (wander.x <= minX) {
-      wander.x = minX;
-      wander.direction = 1;
-    } else if (wander.x >= maxX) {
-      wander.x = maxX;
-      wander.direction = -1;
-    }
-    moveMascotTo(wander.x, wander.y);
-  }
-
-  const facing = wander.direction >= 0 ? 'right' : 'left';
-  if (walking !== wander.lastSentWalking || facing !== wander.lastSentFacing) {
-    wander.lastSentWalking = walking;
-    wander.lastSentFacing = facing;
-    sendMascotWalk({ walking, facing });
-  }
-}
-
-function startWanderTimer() {
-  stopWanderTimer();
-  wanderIntervalId = setInterval(wanderTick, DRIFT_TICK_MS);
-}
-
-function stopWanderTimer() {
-  if (wanderIntervalId) clearInterval(wanderIntervalId);
-  wanderIntervalId = null;
 }
 
 function getVirtualScreenBounds() {
@@ -380,9 +279,6 @@ async function handleLookupSelect(localRect) {
 
   const p0 = localPointToScreen(localRect.x0, localRect.y0);
   const p1 = localPointToScreen(localRect.x1, localRect.y1);
-  const width = Math.abs(p1.x - p0.x);
-  const height = Math.abs(p1.y - p0.y);
-  const isDrag = width > DRAG_THRESHOLD_PX || height > DRAG_THRESHOLD_PX;
   const anchorPoint = { x: Math.round((p0.x + p1.x) / 2), y: Math.round((p0.y + p1.y) / 2) };
 
   const persona = getPersona(currentCharacter);
@@ -392,26 +288,14 @@ async function handleLookupSelect(localRect) {
     // 「調べています」ポップアップを表示するより前にキャプチャを済ませる。
     // 先にポップアップを出してしまうと、行またぎ選択のために左右へ大きく
     // 広げたキャプチャ範囲にポップアップ自体が写り込んでしまうため。
-    let rec;
-    let shot;
-    if (isDrag) {
-      // マーカーでドラッグした始点〜終点を、テキストの流れとしてOCRする
-      // (行をまたぐ選択でも正しく拾えるよう、単純な矩形との重なり判定は使わない)
-      shot = await screenshot.captureRegion(p0, p1);
-      if (!shot) {
-        showPopup(anchorPoint, { status: 'error', error: '画面のキャプチャに失敗しました。', persona });
-        return;
-      }
-      rec = await ocr.recognizeFlowRegion(shot.buffer, shot.dragStart, shot.dragEnd);
-    } else {
-      // 単純なクリックの場合は、これまで通りクリック位置に最も近い単語を拾う
-      shot = await screenshot.captureAroundPoint(anchorPoint);
-      if (!shot) {
-        showPopup(anchorPoint, { status: 'error', error: '画面のキャプチャに失敗しました。', persona });
-        return;
-      }
-      rec = await ocr.recognizeNear(shot.buffer, shot.cx, shot.cy);
+    // ただのクリックでも、ドラッグの範囲調査と同じ「行の流れ」に沿ったOCRで拾う
+    // (クリック位置に最も近い単語を推測する方式は誤検知が多かったため、統一した)。
+    const shot = await screenshot.captureRegion(p0, p1);
+    if (!shot) {
+      showPopup(anchorPoint, { status: 'error', error: '画面のキャプチャに失敗しました。', persona });
+      return;
     }
+    const rec = await ocr.recognizeFlowRegion(shot.buffer, shot.dragStart, shot.dragEnd);
 
     showPopup(anchorPoint, { status: 'loading', persona });
 
@@ -692,8 +576,10 @@ function buildContextMenu() {
 }
 
 const QUIZ_WIDTH = 300;
-const QUIZ_MIN_HEIGHT = 130;
-const QUIZ_MAX_HEIGHT = 380;
+const QUIZ_MIN_HEIGHT = 140; // 吹き出しのしっぽ分を含む高さ
+const QUIZ_MAX_HEIGHT = 390;
+const QUIZ_SCREEN_MARGIN = 14; // 画面の端にぴったりくっつかないための余白
+const QUIZ_MASCOT_GAP = 14; // マスコットとの間の隙間
 
 function scheduleNextQuiz() {
   if (quizTimer) clearTimeout(quizTimer);
@@ -713,27 +599,39 @@ function maybeShowQuiz() {
   openQuizWindow(entry);
 }
 
-// width/height含め、必ずディスプレイの作業領域(タスクバー等を除いた範囲)に収まるよう
-// 厳密にクランプする。マスコットの上、入らなければ下に表示する。
+// width/height含め、必ずディスプレイの作業領域(タスクバー等を除いた範囲)から
+// QUIZ_SCREEN_MARGIN分の余白を空けて収まるよう厳密にクランプする。
+// マスコットから吹き出しが伸びているように見せるため、真上(入らなければ下)に表示する。
 function positionQuizWindow(width, height) {
   const display = screen.getDisplayNearestPoint({ x: wander.x + MASCOT_W / 2, y: wander.y + MASCOT_H / 2 });
   const work = display.workArea;
-  const w = Math.min(width, work.width);
-  const h = Math.min(height, work.height);
+  const minX = work.x + QUIZ_SCREEN_MARGIN;
+  const minY = work.y + QUIZ_SCREEN_MARGIN;
+  const maxWidth = Math.max(1, work.width - QUIZ_SCREEN_MARGIN * 2);
+  const maxHeight = Math.max(1, work.height - QUIZ_SCREEN_MARGIN * 2);
+  const w = Math.min(width, maxWidth);
+  const h = Math.min(height, maxHeight);
 
   let x = wander.x + MASCOT_W / 2 - w / 2;
-  let y = wander.y - h - 12;
-  if (y < work.y) y = wander.y + MASCOT_H + 12; // 上にはみ出す場合はマスコットの下に出す
+  let y = wander.y - h - QUIZ_MASCOT_GAP;
+  let side = 'above';
+  if (y < minY) {
+    y = wander.y + MASCOT_H + QUIZ_MASCOT_GAP; // 上にはみ出す場合はマスコットの下に出す
+    side = 'below';
+  }
 
-  x = Math.max(work.x, Math.min(work.x + work.width - w, x));
-  y = Math.max(work.y, Math.min(work.y + work.height - h, y));
+  x = Math.max(minX, Math.min(minX + maxWidth - w, x));
+  y = Math.max(minY, Math.min(minY + maxHeight - h, y));
 
-  return { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) };
+  return { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h), side };
 }
+
+let lastQuizSide = 'above'; // マスコットに向かう吹き出しのしっぽの向き(上/下どちらに表示したか)
 
 function openQuizWindow(entry) {
   const persona = getPersona(currentCharacter);
-  const { x, y, width, height } = positionQuizWindow(QUIZ_WIDTH, QUIZ_MIN_HEIGHT);
+  const { x, y, width, height, side } = positionQuizWindow(QUIZ_WIDTH, QUIZ_MIN_HEIGHT);
+  lastQuizSide = side;
 
   quizWindow = new BrowserWindow({
     width,
@@ -759,7 +657,7 @@ function openQuizWindow(entry) {
   quizWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   quizWindow.loadFile(path.join(__dirname, 'renderer', 'quiz', 'index.html'));
   quizWindow.webContents.once('did-finish-load', () => {
-    if (quizWindow) quizWindow.webContents.send('quiz:show', { entry, persona });
+    if (quizWindow) quizWindow.webContents.send('quiz:show', { entry, persona, side: lastQuizSide });
   });
   quizWindow.once('ready-to-show', () => {
     if (quizWindow) quizWindow.showInactive();
@@ -778,7 +676,6 @@ function startMainApp() {
   if (mascotWindow) return;
   createMascotWindow();
   createPopupWindow();
-  startWanderTimer();
   scheduleNextQuiz();
 }
 
@@ -807,7 +704,6 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
-  stopWanderTimer();
   sysinfo.stop();
   if (quizTimer) clearTimeout(quizTimer);
 });
@@ -853,8 +749,12 @@ ipcMain.handle('popup:remove-dictionary', () => {
 ipcMain.on('quiz:content-size', (_event, size) => {
   if (!quizWindow || quizWindow.isDestroyed()) return;
   const requested = Math.max(QUIZ_MIN_HEIGHT, Math.min(QUIZ_MAX_HEIGHT, Math.ceil(size.height)));
-  const { x, y, width, height } = positionQuizWindow(QUIZ_WIDTH, requested);
+  const { x, y, width, height, side } = positionQuizWindow(QUIZ_WIDTH, requested);
   quizWindow.setBounds({ x, y, width, height });
+  if (side !== lastQuizSide) {
+    lastQuizSide = side;
+    quizWindow.webContents.send('quiz:side', side);
+  }
 });
 
 ipcMain.on('quiz:open-link', (_event, uri) => {

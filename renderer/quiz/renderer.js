@@ -1,6 +1,7 @@
 const questionEl = document.getElementById('question');
 const textEl = document.getElementById('text');
 const sourcesEl = document.getElementById('sources');
+const wrapEl = document.getElementById('wrap');
 const cardEl = document.getElementById('card');
 const closeEl = document.getElementById('close');
 const rememberedEl = document.getElementById('remembered');
@@ -37,11 +38,12 @@ function renderSources(term, sources) {
   sourcesEl.classList.toggle('hidden', items.length === 0);
 }
 
-window.quizAPI.onShow(({ entry, persona }) => {
+window.quizAPI.onShow(({ entry, persona, side }) => {
   currentTerm = entry.term;
   if (persona && persona.accent) {
     cardEl.style.setProperty('--accent', persona.accent);
   }
+  wrapEl.classList.toggle('below', side === 'below');
 
   const template = (persona && persona.quizQuestion) || '「{term}」って覚えてる?';
   questionEl.textContent = template.replace('{term}', entry.term);
@@ -49,9 +51,15 @@ window.quizAPI.onShow(({ entry, persona }) => {
   renderSources(entry.term, entry.sources);
 
   requestAnimationFrame(() => {
-    const height = cardEl.getBoundingClientRect().height;
+    // しっぽ分も含めたウィンドウ全体の高さを報告する
+    const height = wrapEl.getBoundingClientRect().height;
     window.quizAPI.reportSize({ height });
   });
+});
+
+// マスコットとの位置関係(上/下)が変わったら、吹き出しのしっぽの向きだけ切り替える
+window.quizAPI.onSide((side) => {
+  wrapEl.classList.toggle('below', side === 'below');
 });
 
 closeEl.addEventListener('click', () => {
