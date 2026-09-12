@@ -63,29 +63,39 @@ function markResponse(app, term, response) {
   writeDictionary(app, list);
 }
 
-const FORGOT_WEIGHT = 5; // 「覚えてない」と答えた語句は、他の語句よりこの倍率だけ出題されやすくする
-const NORMAL_WEIGHT = 1;
+// 語句を3つのグループに分け、グループごとに出題される確率を固定する。
+// (個数ではなく確率をグループ単位で固定するのがポイント。例えば「覚えてる」に
+// 分類された語句がどれだけ増えても、全体としての出題率はOTHER_RATIOのまま変わらない
+// ようにすることで、数が多いだけの語句ばかり出題される偏りを防ぐ)
+const NEW_RATIO = 0.5; // まだ出題していない語句
+const FORGOT_RATIO = 0.35; // 「覚えてない」と答えた語句
+const OTHER_RATIO = 0.15; // 「覚えてる」と答えた語句、または未回答の語句
 
-// 1. まだ出題していない語句(lastQuizzedAtが無いもの)を最優先で選ぶ。
-// 2. 全て出題済みなら、「覚えてない」と答えた語句を優先しつつ、
-//    「覚えてる」と答えた語句や未回答の語句もたまに混ざるよう重み付き抽選する。
 function pickQuizEntry(entries) {
-  const neverQuizzed = entries.filter((e) => !e.lastQuizzedAt);
-  if (neverQuizzed.length > 0) {
-    return neverQuizzed[Math.floor(Math.random() * neverQuizzed.length)];
+  const tiers = {
+    new: entries.filter((e) => !e.lastQuizzedAt),
+    forgot: entries.filter((e) => e.lastQuizzedAt && e.lastResponse === 'forgot'),
+    other: entries.filter((e) => e.lastQuizzedAt && e.lastResponse !== 'forgot'),
+  };
+  const ratios = { new: NEW_RATIO, forgot: FORGOT_RATIO, other: OTHER_RATIO };
+
+  // 中身が空のグループはくじから除外し、残ったグループの比率で抽選する
+  const available = Object.keys(ratios).filter((key) => tiers[key].length > 0);
+  if (available.length === 0) return null;
+
+  const total = available.reduce((sum, key) => sum + ratios[key], 0);
+  let roll = Math.random() * total;
+  let chosenTier = available[available.length - 1];
+  for (const key of available) {
+    if (roll < ratios[key]) {
+      chosenTier = key;
+      break;
+    }
+    roll -= ratios[key];
   }
 
-  const weighted = entries.map((e) => ({
-    entry: e,
-    weight: e.lastResponse === 'forgot' ? FORGOT_WEIGHT : NORMAL_WEIGHT,
-  }));
-  const total = weighted.reduce((sum, w) => sum + w.weight, 0);
-  let roll = Math.random() * total;
-  for (const w of weighted) {
-    if (roll < w.weight) return w.entry;
-    roll -= w.weight;
-  }
-  return weighted[weighted.length - 1].entry;
+  const pool = tiers[chosenTier];
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 module.exports = { loadDictionary, saveEntry, deleteEntry, markQuizzed, markResponse, pickQuizEntry };
