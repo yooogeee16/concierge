@@ -23,6 +23,7 @@ const MASCOT_PADDING = 22; // ホバーの光彩や、ドラッグでつまむ�
 const MASCOT_W = MASCOT_DISPLAY_W + MASCOT_PADDING * 2;
 const MASCOT_H = MASCOT_DISPLAY_H + MASCOT_PADDING * 2;
 const MASCOT_MARGIN = 24;
+const MASCOT_MOVE_THRESHOLD_PX = 3; // これ未満の'move'はクリックの誤差とみなし、ドラッグ扱いしない
 
 const POPUP_WIDTH = 320;
 const POPUP_MIN_HEIGHT = 70;
@@ -98,11 +99,16 @@ function createMascotWindow() {
   wander.y = initialY;
 
   // ドラッグは-webkit-app-region:drag によるOSネイティブ移動に任せている。
-  // マスコット自身は動かさないので、'move'イベントは常にユーザーによるドラッグ。
+  // ただし、動かさずにクリックしただけでも1px程度の'move'イベントが発生することが
+  // あるため、しきい値以上動いた場合だけ実際のドラッグ(=モード終了)とみなす。
   mascotWindow.on('move', () => {
     if (!mascotWindow) return;
     const [x, y] = mascotWindow.getPosition();
-    if (activeMode !== null) exitMode();
+    const dx = Math.abs(x - wander.x);
+    const dy = Math.abs(y - wander.y);
+    if ((dx > MASCOT_MOVE_THRESHOLD_PX || dy > MASCOT_MOVE_THRESHOLD_PX) && activeMode !== null) {
+      exitMode();
+    }
     wander.x = x;
     wander.y = y;
   });
