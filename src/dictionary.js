@@ -67,17 +67,25 @@ function markResponse(app, term, response) {
 // (個数ではなく確率をグループ単位で固定するのがポイント。例えば「覚えてる」に
 // 分類された語句がどれだけ増えても、全体としての出題率はOTHER_RATIOのまま変わらない
 // ようにすることで、数が多いだけの語句ばかり出題される偏りを防ぐ)
-const NEW_RATIO = 0.5; // まだ出題していない語句
-const FORGOT_RATIO = 0.35; // 「覚えてない」と答えた語句
-const OTHER_RATIO = 0.15; // 「覚えてる」と答えた語句、または未回答の語句
+// この重み付け(FOCUSED)と、完全に均等な抽選(UNIFORM)の間を「ランダム性」で補間する。
+const FOCUSED_RATIOS = { new: 0.5, forgot: 0.35, other: 0.15 };
+const UNIFORM_RATIOS = { new: 1 / 3, forgot: 1 / 3, other: 1 / 3 };
+const DEFAULT_QUIZ_RANDOMNESS = 60; // 0(重み付け通り)〜100(完全均等)。設定未指定時のデフォルト
 
-function pickQuizEntry(entries) {
+// randomness: 0〜100。0でFOCUSED_RATIOSそのまま、100で完全に均等(UNIFORM_RATIOS)な抽選になる
+function pickQuizEntry(entries, randomness) {
+  const r =
+    Math.max(0, Math.min(100, typeof randomness === 'number' ? randomness : DEFAULT_QUIZ_RANDOMNESS)) / 100;
+
   const tiers = {
     new: entries.filter((e) => !e.lastQuizzedAt),
     forgot: entries.filter((e) => e.lastQuizzedAt && e.lastResponse === 'forgot'),
     other: entries.filter((e) => e.lastQuizzedAt && e.lastResponse !== 'forgot'),
   };
-  const ratios = { new: NEW_RATIO, forgot: FORGOT_RATIO, other: OTHER_RATIO };
+  const ratios = {};
+  for (const key of Object.keys(FOCUSED_RATIOS)) {
+    ratios[key] = FOCUSED_RATIOS[key] * (1 - r) + UNIFORM_RATIOS[key] * r;
+  }
 
   // 中身が空のグループはくじから除外し、残ったグループの比率で抽選する
   const available = Object.keys(ratios).filter((key) => tiers[key].length > 0);
@@ -98,4 +106,12 @@ function pickQuizEntry(entries) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-module.exports = { loadDictionary, saveEntry, deleteEntry, markQuizzed, markResponse, pickQuizEntry };
+module.exports = {
+  loadDictionary,
+  saveEntry,
+  deleteEntry,
+  markQuizzed,
+  markResponse,
+  pickQuizEntry,
+  DEFAULT_QUIZ_RANDOMNESS,
+};
