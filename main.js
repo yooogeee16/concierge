@@ -31,7 +31,17 @@ const POPUP_MAX_HEIGHT = 420;
 const POPUP_OFFSET = 18;
 
 // --- 辞書の復習クイズ関連定数。「たまに」聞きに来る程度の頻度に留める ---
-const QUIZ_INTERVAL_MS = [60 * 1000, 60 * 1000]; // 1分に1回
+const DEFAULT_QUIZ_INTERVAL_MINUTES = 1; // 設定未指定時のデフォルト出題間隔
+const QUIZ_INTERVAL_JITTER = [0.7, 1.3]; // 設定した間隔の±30%でばらつかせ、機械的な等間隔にならないようにする
+
+// 設定された出題間隔(分)を中心に、ジッターを持たせた[最小,最大]msの範囲を返す
+function getQuizIntervalRangeMs() {
+  const minutes = typeof settings.quizIntervalMinutes === 'number' && settings.quizIntervalMinutes > 0
+    ? settings.quizIntervalMinutes
+    : DEFAULT_QUIZ_INTERVAL_MINUTES;
+  const baseMs = minutes * 60 * 1000;
+  return [baseMs * QUIZ_INTERVAL_JITTER[0], baseMs * QUIZ_INTERVAL_JITTER[1]];
+}
 
 let mascotWindow = null;
 let overlayWindow = null;
@@ -509,9 +519,9 @@ function createSetupWindow(prefill) {
   }
   setupWindow = new BrowserWindow({
     width: 460,
-    height: 430,
+    height: 560,
     resizable: false,
-    title: 'コンシェルジュ 初期設定',
+    title: 'コンシェルジュ 設定',
     icon: APP_ICON_PATH,
     autoHideMenuBar: true,
     webPreferences: {
@@ -521,11 +531,14 @@ function createSetupWindow(prefill) {
     },
   });
   setupWindow.loadFile(path.join(__dirname, 'renderer', 'setup', 'index.html'));
-  if (prefill && settings.apiKey) {
-    setupWindow.webContents.on('did-finish-load', () => {
-      if (setupWindow) setupWindow.webContents.send('setup:prefill', settings.apiKey);
+  setupWindow.webContents.on('did-finish-load', () => {
+    if (!setupWindow) return;
+    setupWindow.webContents.send('setup:prefill', {
+      apiKey: prefill && settings.apiKey ? settings.apiKey : '',
+      quizRandomness: settings.quizRandomness,
+      quizIntervalMinutes: settings.quizIntervalMinutes,
     });
-  }
+  });
   setupWindow.on('closed', () => {
     setupWindow = null;
     // タイトルバーの×で閉じた場合も、まだ起動していなければ起動する(後からいつでもAPIキーは設定可能)
@@ -575,7 +588,7 @@ function buildContextMenu() {
       label: 'システム情報',
       submenu: sysinfo.getSnapshotLines().map((label) => ({ label, enabled: false })),
     },
-    { label: 'APIキーを再設定', click: () => createSetupWindow(true) },
+    { label: '設定を開く', click: () => createSetupWindow(true) },
     { type: 'separator' },
     { label: '終了', click: () => app.quit() },
   ]);
@@ -589,7 +602,7 @@ const QUIZ_MASCOT_GAP = 14; // マスコットとの間の隙間
 
 function scheduleNextQuiz() {
   if (quizTimer) clearTimeout(quizTimer);
-  quizTimer = setTimeout(maybeShowQuiz, randRange(QUIZ_INTERVAL_MS));
+  quizTimer = setTimeout(maybeShowQuiz, randRange(getQuizIntervalRangeMs()));
 }
 
 // 辞書に登録した語句を、たまにマスコットが思い出したように聞きに来る。
@@ -600,7 +613,7 @@ function maybeShowQuiz() {
   if (quizWindow && !quizWindow.isDestroyed()) return; // 既に聞いている最中
   const entries = dictionary.loadDictionary(app);
   if (!entries || entries.length === 0) return;
-  const entry = dictionary.pickQuizEntry(entries);
+  const entry = dictionary.pickQuizEntry(entries, settings.quizRandomness);
   dictionary.markQuizzed(app, entry.term);
   openQuizWindow(entry);
 }
@@ -689,6 +702,8 @@ app.whenReady().then(() => {
   settings = store.loadSettings(app);
   if (!settings.character || !PERSONAS[settings.character]) settings.character = 'navy';
   currentCharacter = settings.character;
+  if (typeof settings.quizRandomness !== 'number') settings.quizRandomness = dictionary.DEFAULT_QUIZ_RANDOMNESS;
+  if (typeof settings.quizIntervalMinutes !== 'number') settings.quizIntervalMinutes = DEFAULT_QUIZ_INTERVAL_MINUTES;
 
   createTray();
   sysinfo.start();
@@ -785,10 +800,15 @@ ipcMain.on('dictionary:open-link', (_event, uri) => {
   if (typeof uri === 'string' && /^https?:\/\//.test(uri)) shell.openExternal(uri);
 });
 
-ipcMain.on('setup:save', (_event, apiKey) => {
-  settings.apiKey = String(apiKey || '').trim();
+ipcMain.on('setup:save', (_event, data) => {
+  settings.apiKey = String((data && data.apiKey) || '').trim();
+  const randomness = data && Number(data.quizRandomness);
+  if (Number.isFinite(randomness)) settings.quizRandomness = Math.max(0, Math.min(100, randomness));
+  const intervalMinutes = data && Number(data.quizIntervalMinutes);
+  if (Number.isFinite(intervalMinutes) && intervalMinutes > 0) settings.quizIntervalMinutes = intervalMinutes;
   store.saveSettings(app, settings);
   if (setupWindow) setupWindow.close();
+  if (mascotWindow) scheduleNextQuiz(); // 起動中ならすぐに新しい間隔・ランダム性を反映する
   startMainApp();
 });
 

@@ -2,12 +2,12 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>コンシェルジュ 初期設定</title>
+    <title>コンシェルジュ 設定</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div id="card">
-      <h1>コンシェルジュの初期設定</h1>
+      <h1>コンシェルジュの設定</h1>
       <p>
         画面上の文字を解説するには、Gemini APIの無料キーが必要です。<br />
         <a id="link" href="#">Google AI Studioでキーを取得</a>
@@ -15,12 +15,28 @@
       <label for="apiKey">Gemini APIキー</label>
       <input id="apiKey" type="password" placeholder="AIza... または AQ... のようなキーを貼り付け" autocomplete="off" />
 
+      <hr />
+
+      <label for="quizRandomness">
+        辞書クイズのランダム性: <span id="quizRandomnessValue">60%</span>
+      </label>
+      <input id="quizRandomness" type="range" min="0" max="100" step="5" value="60" />
+      <p class="hint">
+        低いほど「まだ覚えてない語句」を優先的に出題し、高いほど出題する語句を均等にランダムへ近づけます。
+      </p>
+
+      <label for="quizInterval">辞書クイズの出題間隔(分)</label>
+      <input id="quizInterval" type="number" min="1" max="180" step="1" value="1" />
+      <p class="hint">
+        この間隔を目安に、多少前後させながらマスコットが聞きに来ます。
+      </p>
+
       <div id="row">
         <button id="skip" class="secondary">後で設定する</button>
-        <button id="save" class="primary">保存して始める</button>
+        <button id="save" class="primary">保存する</button>
       </div>
       <p id="note">
-        キーはこの端末内(<code>%APPDATA%</code>)にのみ保存され、リポジトリやクラウドには送信されません。後からマスコットを右クリックしていつでも変更できます。
+        設定はこの端末内(<code>%APPDATA%</code>)にのみ保存され、リポジトリやクラウドには送信されません。後からマスコットを右クリックしていつでも変更できます。
       </p>
     </div>
     <script src="renderer.js"></script>
